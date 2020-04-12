@@ -10,9 +10,9 @@
 #define IP "127.0.0.1"
 #define PORT 5555
 
-#define NR_KEY 500000
-#define NR_QUERY 500000
-#define KEY_LEN 16
+#define NR_KEY   50000000
+#define NR_QUERY 1000000
+#define KEY_LEN  16
 
 #define CDF_TABLE_MAX 100000
 
@@ -81,7 +81,7 @@ static void collect_cdf(time_t latency) {
 	}
 }
 
-static int run_bench(key_dist_t dist) {
+static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 	struct net_req net_req;
 	time_t latency;
 
@@ -89,7 +89,7 @@ static int run_bench(key_dist_t dist) {
 
 	sw = sw_create();
 
-	set_key_dist(kg, dist);
+	set_key_dist(kg, dist, query_ratio, hotset_ratio);
 	for (size_t i = 0; i < NR_QUERY; i++) {
 		if (i%(NR_QUERY/100)==0) {
 			printf("\rProgress [%3.0f%%] (%lu/%d)",
@@ -103,10 +103,6 @@ static int run_bench(key_dist_t dist) {
 		collect_cdf(latency);
 	}
 	puts("\nBenchmark finished!");
-	return 0;
-}
-
-static int bench_free() {
 	uint64_t cdf_sum = 0;
 	printf("#latency,cnt,cdf\n");
 	for (int i = 1; i < CDF_TABLE_MAX && cdf_sum != NR_QUERY; i++) {
@@ -114,8 +110,23 @@ static int bench_free() {
 			cdf_sum += cdf_table[i];
 			printf("%d,%lu,%.6f\n",
 				i*10, cdf_table[i], (float)cdf_sum/NR_QUERY);
+			cdf_table[i] = 0;
 		}
 	}
+	sw_destroy(sw);
+	return 0;
+}
+
+static int bench_free() {
+/*	uint64_t cdf_sum = 0;
+	printf("#latency,cnt,cdf\n");
+	for (int i = 1; i < CDF_TABLE_MAX && cdf_sum != NR_QUERY; i++) {
+		if (cdf_table[i] != 0) {
+			cdf_sum += cdf_table[i];
+			printf("%d,%lu,%.6f\n",
+				i*10, cdf_table[i], (float)cdf_sum/NR_QUERY);
+		}
+	} */
 	keygen_free(kg);
 	close(sock);
 	return 0;
@@ -132,7 +143,12 @@ int main(int argc, char *argv[]) {
 	load_kvpairs();
 
 	/* Benchmark phase */
-	run_bench(KEY_DIST_UNIFORM);
+	run_bench(KEY_DIST_UNIFORM, 50, 50);
+	run_bench(KEY_DIST_UNIFORM, 50, 50);
+	run_bench(KEY_DIST_LOCALITY, 60, 40);
+	run_bench(KEY_DIST_LOCALITY, 70, 30);
+	run_bench(KEY_DIST_LOCALITY, 80, 20);
+	run_bench(KEY_DIST_LOCALITY, 90, 10);
 
 	bench_free();
 	return 0;

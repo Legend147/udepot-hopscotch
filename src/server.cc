@@ -1,5 +1,6 @@
 #include "type.h"
 #include "ops.h"
+#include "config.h"
 #include "hopscotch.h"
 #include "util.h"
 #include "stopwatch.h"
@@ -10,13 +11,6 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-
-#define KEY_LEN 16
-
-struct net_req {
-	char key[KEY_LEN];
-	uint8_t type;
-};
 
 extern struct hash_ops hash_ops;
 stopwatch *sw;
@@ -69,52 +63,16 @@ static int connect_client() {
 	return 0;
 }
 
-static ssize_t read_sock(int sock, void *buf, ssize_t count) {
-	ssize_t len = 0;
-	while (len != count) {
-		len += read(sock, (char *)buf + len, count-len);
-	}
-	return len;
-}
-
-static ssize_t send_ack(int sock, long latency) {
-	return write(sock, &latency, sizeof(long));
-}
-
 static int handle_request() {
 	int rc = 0;
 
 	struct net_req net_req;
-	uint64_t hkey = 0;
-
-	sw = sw_create();
+	struct net_ack net_ack;
 
 	while (1) {
 		read_sock(cl_sock, &net_req, sizeof(struct net_req));
 
-		sw_start(sw);
-		hkey = hashing_key(net_req.key, KEY_LEN);
-
-		switch (net_req.type) {
-		case 0:
-			rc = hash_ops.insert(hkey);
-			//usleep(10);
-			break;	
-		case 1:
-			rc = hash_ops.lookup(hkey);
-			usleep(10);
-			if (rc) {
-				puts("Not existing key!");
-				abort();
-			}
-			break;
-		default:
-			fprintf(stderr, "Wrong req type!\n");
-			break;
-		}
-		sw_end(sw);
-
-		send_ack(cl_sock, sw_get_usec(sw));
+		//struct request *req = make_request_from_netreq(&net_req);
 	}
 	return 0;
 }
@@ -125,7 +83,7 @@ int main() {
 
 	/* Table init */
 	hash_ops.init();
-	
+
 	/* Connect client */
 	connect_client();
 

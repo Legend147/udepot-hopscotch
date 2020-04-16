@@ -34,7 +34,11 @@ $(OBJ_DIR)/$(TARGET).o: $(SRC_DIR)/$(TARGET).c
 $(LIB_DIR)/libdfhash.a:
 	@mkdir -p $(LIB_DIR)
 	$(CC) -c $(SRC_DIR)/util.c $(CFLAGS)
+	$(CC) -c $(SRC_DIR)/stopwatch.c $(CFLAGS)
 	$(CC) -c $(SRC_DIR)/keygen.c $(CFLAGS)
+	$(CC) -c $(SRC_DIR)/queue.c $(CFLAGS)
+	$(CC) -c $(SRC_DIR)/cond_lock.c $(CFLAGS)
+	$(CC) -c $(SRC_DIR)/handler.c $(CFLAGS)
 	@mv *.o $(LIB_DIR)
 	$(AR) r $@ $(LIB_DIR)/*
 

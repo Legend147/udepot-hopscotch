@@ -15,16 +15,10 @@ struct hash_ops hash_ops = {
 struct hash_stat hstat;
 struct hopscotch hs;
 
-/*
-static bool is_full() {
-	return (hs.cached_part.size() == NR_CACHED_PART);
-}
-*/
-
 int hopscotch_init() {
-	printf("===================================\n");
-	printf(" Demand-based Hopscotch Hash-table \n");
-	printf("===================================\n\n");
+	printf("===============================\n");
+	printf(" uDepot's Hopscotch Hash-table \n");
+	printf("===============================\n\n");
 
 	printf("hopscotch_init()...\n\n");
 
@@ -36,16 +30,6 @@ int hopscotch_init() {
 		for (int j = 0; j < NR_ENTRY; j++) {
 			hs.table[i].entry[j].pba = PBA_INVALID;
 		}
-		/*
-		// part
-		hs.table[i].is_cached = (bool *)calloc(NR_PART, sizeof(bool));
-		for (int j = 0; j < NR_PART; j++) {
-			if (!is_full()) {
-				hs.table[i].is_cached[j] = true;
-				hs.cached_part.push_front(&hs.table[i].is_cached[j]);
-			}
-		}
-		*/
 	}
 
 	hs.temp_buf = (char *)malloc(TEMP_BUF_SIZE);
@@ -78,34 +62,17 @@ int hopscotch_free() {
 	// Free tables
 	for (int i = 0; i < NR_TABLE; i++) {
 		free(hs.table[i].entry);
-		//free(hs.table[i].is_cached);
 	}
 	free(hs.table);
 
 	return 0;
 }
 
-static int find_matching_tag(struct hash_table *ht, uint32_t idx, int offset, uint8_t tag, int *cost) {
+static int find_matching_tag
+(struct hash_table *ht, uint32_t idx, int offset, uint8_t tag) {
 	while (offset < MAX_HOP) {
 		int current_idx = (idx + offset) % NR_ENTRY;
 		struct hash_entry *entry = &ht->entry[current_idx];
-
-		/*
-		int current_part = current_idx / (PAGESIZE/8);
-		if (!ht->is_cached[current_part]) {
-			if (is_full()) {
-				bool *popped = hs.cached_part.back();
-				hs.cached_part.pop_back();
-				*popped = false;
-			}
-			ht->is_cached[current_part] = true;
-			hs.cached_part.push_front(&ht->is_cached[current_part]);
-
-			++(*cost);
-		} else {
-			// LRU update
-		}
-		*/
 
 		if (entry->key_fp_tag == tag) return offset;
 		++offset;
@@ -120,7 +87,8 @@ static void print_entry(struct hash_entry *entry) {
 }
 #endif
 
-static void fill_entry(struct hash_entry *entry, uint8_t offset, uint8_t tag, uint16_t size, uint64_t pba) {
+static void fill_entry
+(struct hash_entry *entry, uint8_t offset, uint8_t tag, uint16_t size, uint64_t pba) {
 	*entry = (struct hash_entry){offset, tag, size, (pba & PBA_INVALID)};
 	//print_entry(entry);
 }
@@ -171,7 +139,7 @@ int hopscotch_insert(uint64_t h_key) {
 	int req_flash_read = 0;
 
 	// phase 1: find matching tag
-	offset = find_matching_tag(ht, idx, 0, tag, &req_flash_read);
+	offset = find_matching_tag(ht, idx, 0, tag);
 	while (offset != -1) {
 		++req_flash_read;
 
@@ -180,7 +148,7 @@ int hopscotch_insert(uint64_t h_key) {
 			fill_entry(entry, offset, tag, 1, h_key);
 			goto exit;
 		}
-		offset = find_matching_tag(ht, idx, offset+1, tag, &req_flash_read);
+		offset = find_matching_tag(ht, idx, offset+1, tag);
 	}
 
 	// phase 2: find free entry
@@ -216,7 +184,7 @@ int hopscotch_lookup(uint64_t h_key) {
 
 	int req_flash_read = 0;
 
-	offset = find_matching_tag(ht, idx, 0, tag, &req_flash_read);
+	offset = find_matching_tag(ht, idx, 0, tag);
 	while (offset != -1) {
 		++req_flash_read;
 		usleep(1);
@@ -226,7 +194,7 @@ int hopscotch_lookup(uint64_t h_key) {
 			rc = 0;
 			goto exit;
 		}
-		offset = find_matching_tag(ht, idx, offset+1, tag, &req_flash_read);
+		offset = find_matching_tag(ht, idx, offset+1, tag);
 	}
 
 	rc = 1;

@@ -1,11 +1,14 @@
 #include "keygen.h"
-#include "stopwatch.h"
+#include "util.h"
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <semaphore.h>
+#include <pthread.h>
 
 #define IP "127.0.0.1"
 #define PORT 5555
@@ -14,18 +17,41 @@
 #define NR_QUERY 1000000
 #define KEY_LEN  16
 
-#define CDF_TABLE_MAX 100000
-
-struct net_req {
-	char key[KEY_LEN];
-	uint8_t type; // 0: set, 1: get
-};
+#define SRV_QDEPTH 64
 
 struct keygen *kg;
 int sock;
 stopwatch *sw;
+sem_t sem;
+pthread_t tid;
+uint32_t seq_num_global;
 
-uint64_t cdf_table[100000];
+uint64_t cdf_table[CDF_TABLE_MAX];
+
+void *ack_poller(void *arg) {
+	struct net_ack net_ack;
+
+	puts("Bench :: ack_poller() created");
+
+	while (1) {
+		recv_ack(sock, &net_ack);
+		req_out(&sem);
+
+		if (net_ack.req_type == REQ_TYPE_GET) {
+			collect_latency(cdf_table, net_ack.elapsed_time);
+		}
+	}
+}
+
+static int bench_init() {
+	kg = keygen_init(NR_KEY, KEY_LEN);
+
+	sem_init(&sem, 0, SRV_QDEPTH);
+
+	pthread_create(&tid, NULL, &ack_poller, NULL);
+
+	return 0;
+}
 
 static int connect_server() {
 	struct sockaddr_in addr;
@@ -48,93 +74,60 @@ static int connect_server() {
 	return 0;
 }
 
-static ssize_t send_request(struct net_req *nr) {
-	return write(sock, nr, sizeof(struct net_req));
-}
-
-static ssize_t wait_for_ack(time_t *latency) {
-	return read(sock, latency, sizeof(time_t));
-}
-
 static int load_kvpairs() {
 	struct net_req net_req;
-	time_t latency;
 
-	net_req.type = 0;
+	net_req.req_type = REQ_TYPE_SET;
 	for (size_t i = 0; i < NR_KEY; i++) {
+		req_in(&sem);
 		if (i%(NR_KEY/100)==0) {
 			printf("\rProgress [%3.0f%%] (%lu/%d)",
 				(float)i/NR_KEY*100, i, NR_KEY);
 			fflush(stdout);
 		}
 		memcpy(net_req.key, get_next_key_for_load(kg), KEY_LEN);
-		send_request(&net_req);
-		wait_for_ack(&latency);
+		net_req.seq_num = seq_num_global++;
+		send_request(sock, &net_req);
 	}
-	puts("\nLoad finished!");
-	return 0;
-}
+	wait_until_finish(&sem, SRV_QDEPTH);
 
-static void collect_cdf(time_t latency) {
-	if (latency != -1) {
-		cdf_table[latency/10]++;
-	}
+	puts("\nLoad finished!");
+
+	return 0;
 }
 
 static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 	struct net_req net_req;
-	time_t latency;
 
-	net_req.type = 1;
-
-	sw = sw_create();
+	net_req.req_type = REQ_TYPE_GET;
 
 	set_key_dist(kg, dist, query_ratio, hotset_ratio);
 	for (size_t i = 0; i < NR_QUERY; i++) {
+		req_in(&sem);
 		if (i%(NR_QUERY/100)==0) {
 			printf("\rProgress [%3.0f%%] (%lu/%d)",
 				(float)i/NR_QUERY*100,i,NR_QUERY);
 			fflush(stdout);
 		}
 		memcpy(net_req.key, get_next_key(kg), KEY_LEN);
-		send_request(&net_req);
-		wait_for_ack(&latency);
+		send_request(sock, &net_req);
+	}
+	wait_until_finish(&sem, SRV_QDEPTH);
 
-		collect_cdf(latency);
-	}
 	puts("\nBenchmark finished!");
-	uint64_t cdf_sum = 0;
-	printf("#latency,cnt,cdf\n");
-	for (int i = 1; i < CDF_TABLE_MAX && cdf_sum != NR_QUERY; i++) {
-		if (cdf_table[i] != 0) {
-			cdf_sum += cdf_table[i];
-			printf("%d,%lu,%.6f\n",
-				i*10, cdf_table[i], (float)cdf_sum/NR_QUERY);
-			cdf_table[i] = 0;
-		}
-	}
-	sw_destroy(sw);
+	print_cdf(cdf_table, NR_QUERY);
+
 	return 0;
 }
 
 static int bench_free() {
-/*	uint64_t cdf_sum = 0;
-	printf("#latency,cnt,cdf\n");
-	for (int i = 1; i < CDF_TABLE_MAX && cdf_sum != NR_QUERY; i++) {
-		if (cdf_table[i] != 0) {
-			cdf_sum += cdf_table[i];
-			printf("%d,%lu,%.6f\n",
-				i*10, cdf_table[i], (float)cdf_sum/NR_QUERY);
-		}
-	} */
 	keygen_free(kg);
 	close(sock);
 	return 0;
 }
 
 int main(int argc, char *argv[]) {
-	/* Key generation */
-	kg = keygen_init(NR_KEY, KEY_LEN);
+	bench_init();
 
 	/* Connect to server */
 	connect_server();

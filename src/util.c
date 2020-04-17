@@ -12,7 +12,7 @@ uint64_t hashing_key(char *key, uint8_t len) {
 ssize_t read_sock(int sock, void *buf, ssize_t count) {
 	ssize_t len = 0;
 	while (len != count) {
-		len += read(sock, (char *)buf + len, count-len);
+		len += read(sock, &(((char *)buf)[len]), count-len);
 	}
 	return len;
 }
@@ -22,7 +22,7 @@ ssize_t send_request(int sock, struct net_req *nr) {
 }
 
 ssize_t recv_request(int sock, struct net_req *nr) {
-	return read_sock(sock, (void *)nr, sizeof(struct net_req));
+	return read_sock(sock, nr, sizeof(struct net_req));
 }
 
 ssize_t send_ack(int sock, struct net_ack *na) {
@@ -30,7 +30,7 @@ ssize_t send_ack(int sock, struct net_ack *na) {
 }
 
 ssize_t recv_ack(int sock, struct net_ack *na) {
-	return read_sock(sock, (void *)na, sizeof(struct net_ack));
+	return read_sock(sock, na, sizeof(struct net_ack));
 }
 
 void collect_latency(uint64_t table[], time_t latency) {

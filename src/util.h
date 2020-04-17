@@ -6,22 +6,23 @@
 #define __DFHASH_UTIL_H__
 
 #include "config.h"
-#include "request.h"
+#include "type.h"
 #include <stdint.h>
 #include <time.h>
 #include <sys/types.h>
 #include <semaphore.h>
 
 struct net_req {
+	req_type_t type;
+	uint8_t keylen;
 	char key[KEY_LEN];
 
 	uint32_t seq_num;
-	req_type_t req_type;
 };
 
 struct net_ack {
 	uint32_t seq_num;
-	req_type_t req_type;
+	req_type_t type;
 
 	time_t elapsed_time;
 };

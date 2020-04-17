@@ -13,15 +13,14 @@
 #define IP "127.0.0.1"
 #define PORT 5555
 
-#define NR_KEY   50000000
-#define NR_QUERY 1000000
+#define NR_KEY   100000
+#define NR_QUERY 100000
 #define KEY_LEN  16
 
-#define SRV_QDEPTH 64
+#define SRV_QDEPTH 1
 
 struct keygen *kg;
 int sock;
-stopwatch *sw;
 sem_t sem;
 pthread_t tid;
 uint32_t seq_num_global;
@@ -37,7 +36,10 @@ void *ack_poller(void *arg) {
 		recv_ack(sock, &net_ack);
 		req_out(&sem);
 
-		if (net_ack.req_type == REQ_TYPE_GET) {
+		static int cnt = 0;
+		printf("%d, %d, %d\n", cnt++, net_ack.type, net_ack.elapsed_time);
+
+		if (net_ack.type == REQ_TYPE_GET) {
 			collect_latency(cdf_table, net_ack.elapsed_time);
 		}
 	}
@@ -77,7 +79,8 @@ static int connect_server() {
 static int load_kvpairs() {
 	struct net_req net_req;
 
-	net_req.req_type = REQ_TYPE_SET;
+	net_req.keylen = KEY_LEN;
+	net_req.type = REQ_TYPE_SET;
 	for (size_t i = 0; i < NR_KEY; i++) {
 		req_in(&sem);
 		if (i%(NR_KEY/100)==0) {
@@ -99,7 +102,8 @@ static int load_kvpairs() {
 static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 	struct net_req net_req;
 
-	net_req.req_type = REQ_TYPE_GET;
+	net_req.keylen = KEY_LEN;
+	net_req.type = REQ_TYPE_GET;
 
 	set_key_dist(kg, dist, query_ratio, hotset_ratio);
 	for (size_t i = 0; i < NR_QUERY; i++) {

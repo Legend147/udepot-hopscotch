@@ -4,6 +4,7 @@
 #include "hopscotch.h"
 #include "util.h"
 #include "stopwatch.h"
+#include "handler.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,9 +17,11 @@ extern struct hash_ops hash_ops;
 stopwatch *sw;
 int sv_sock, cl_sock;
 char ack;
+struct handler *hlr;
 
 static void server_exit(int sig) {
 	puts("");
+	handler_free(hlr);
 	hash_ops.free();
 	sw_destroy(sw);
 	close(cl_sock);
@@ -30,6 +33,12 @@ static int sig_add() {
 	struct sigaction sa;
 	sa.sa_handler = server_exit;
 	sigaction(SIGINT, &sa, NULL);
+	return 0;
+}
+
+static int server_init() {
+	hash_ops.init();
+	hlr = handler_init();
 	return 0;
 }
 
@@ -66,13 +75,16 @@ static int connect_client() {
 static int handle_request() {
 	int rc = 0;
 
-	struct net_req net_req;
-	struct net_ack net_ack;
+	struct net_req n_req;
+	struct request *req;
 
 	while (1) {
-		read_sock(cl_sock, &net_req, sizeof(struct net_req));
-
-		//struct request *req = make_request_from_netreq(&net_req);
+		read_sock(cl_sock, &n_req, sizeof(struct net_req));
+		req = make_request_from_netreq(&n_req, cl_sock);
+		rc = forward_req_to_hlr(hlr, req);
+		if (rc) {
+			abort();
+		}
 	}
 	return 0;
 }
@@ -81,8 +93,8 @@ int main() {
 	/* Add interrupt signal*/
 	sig_add();
 
-	/* Table init */
-	hash_ops.init();
+	/* Server init */
+	server_init();
 
 	/* Connect client */
 	connect_client();

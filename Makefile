@@ -13,10 +13,24 @@ CFLAGS += \
 	-std=c++11 \
 	-fsanitize=address \
 	-lcityhash \
+	-lpthread \
 	-DCITYHASH \
 	-DUNIFORM \
 #	-O2 \
 #	-DHOTSPOT \
+
+OBJ_SRC += \
+	$(SRC_DIR)/util.c \
+	$(SRC_DIR)/stopwatch.c \
+	$(SRC_DIR)/keygen.c \
+	$(SRC_DIR)/queue.c \
+	$(SRC_DIR)/cond_lock.c \
+	$(SRC_DIR)/request.c \
+	$(SRC_DIR)/handler.c \
+	$(SRC_DIR)/request.c \
+
+TARGET_OBJ =\
+		$(patsubst %.c,%.o,$(OBJ_SRC))\
 
 all: client server
 
@@ -31,16 +45,13 @@ $(OBJ_DIR)/$(TARGET).o: $(SRC_DIR)/$(TARGET).c
 	$(CC) -c $^ $(CFLAGS)
 	@mv *.o $(OBJ_DIR)/
 
-$(LIB_DIR)/libdfhash.a:
+$(LIB_DIR)/libdfhash.a: $(TARGET_OBJ)
 	@mkdir -p $(LIB_DIR)
-	$(CC) -c $(SRC_DIR)/util.c $(CFLAGS)
-	$(CC) -c $(SRC_DIR)/stopwatch.c $(CFLAGS)
-	$(CC) -c $(SRC_DIR)/keygen.c $(CFLAGS)
-	$(CC) -c $(SRC_DIR)/queue.c $(CFLAGS)
-	$(CC) -c $(SRC_DIR)/cond_lock.c $(CFLAGS)
-	$(CC) -c $(SRC_DIR)/handler.c $(CFLAGS)
-	@mv *.o $(LIB_DIR)
+	@mv $(SRC_DIR)/*.o $(LIB_DIR)
 	$(AR) r $@ $(LIB_DIR)/*
+
+.c.o:
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	@rm -vf $(BIN_DIR)/*

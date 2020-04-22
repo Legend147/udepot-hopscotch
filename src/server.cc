@@ -13,7 +13,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-extern struct hash_ops hash_ops;
 stopwatch *sw;
 int sv_sock, cl_sock;
 char ack;
@@ -22,7 +21,6 @@ struct handler *hlr;
 static void server_exit(int sig) {
 	puts("");
 	handler_free(hlr);
-	hash_ops.free();
 	sw_destroy(sw);
 	close(cl_sock);
 	close(sv_sock);
@@ -36,9 +34,8 @@ static int sig_add() {
 	return 0;
 }
 
-static int server_init() {
-	hash_ops.init();
-	hlr = handler_init();
+static int server_init(htable_t ht_type) {
+	hlr = handler_init(ht_type);
 	return 0;
 }
 
@@ -94,7 +91,7 @@ int main() {
 	sig_add();
 
 	/* Server init */
-	server_init();
+	server_init(HTABLE_HOPSCOTCH);
 
 	/* Connect client */
 	connect_client();

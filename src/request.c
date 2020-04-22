@@ -11,6 +11,9 @@ struct request *make_request_from_netreq(struct net_req *nr, int sock) {
 	memcpy(req->key, nr->key, req->keylen);
 	req->hkey = hashing_key(req->key, req->keylen);
 
+	req->val_len = 1024;
+	req->value = (char *)malloc(req->val_len);
+
 	req->sw = sw_create();
 	sw_start(req->sw);
 
@@ -24,7 +27,8 @@ struct request *make_request_from_netreq(struct net_req *nr, int sock) {
 	return req;
 }
 
-void net_end_req(struct request *req) {
+void *net_end_req(void *_req) {
+	struct request *req = (struct request *)_req;
 	struct handler *hlr = req->hlr;
 	struct net_ack ack;
 
@@ -40,4 +44,6 @@ void net_end_req(struct request *req) {
 	sw_destroy(req->sw);
 	free(req->key);
 	free(req);
+
+	return NULL;
 }

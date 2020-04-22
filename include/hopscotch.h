@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 #include "config.h"
-#include <list>
+#include "handler.h"
 
 #define IDX_BIT 27
 #define DIR_BIT 0
@@ -30,21 +30,37 @@ struct hash_entry {
 
 struct hash_table {
 	struct hash_entry *entry;
-	//bool *is_cached;
 };
 
 struct hopscotch {
 	struct hash_table *table;
-	//std::list<bool *> cached_part;
 	char *temp_buf;
 
 	uint64_t lookup_cost[FLASH_READ_MAX];
 };
 
-int hopscotch_init();
-int hopscotch_free();
-int hopscotch_insert(uint64_t h_key);
-int hopscotch_lookup(uint64_t h_key);
-int hopscotch_remove(uint64_t h_key);
+enum {
+	HOP_INSERT_INIT,
+	HOP_INSERT_KEY_MATCH,
+	HOP_INSERT_KEY_MISMATCH,
+};
+
+struct hop_params {
+	int offset;
+	int insert_step;
+};
+
+static inline struct hop_params *make_hop_params() {
+	struct hop_params *hp = (struct hop_params *)malloc(sizeof(struct hop_params));
+	hp->offset = 0;
+	hp->insert_step = HOP_INSERT_INIT;
+	return hp;
+}
+
+int hopscotch_init(struct hash_ops *hops);
+int hopscotch_free(struct hash_ops *hops);
+int hopscotch_insert(struct hash_ops *hops, struct request *req);
+int hopscotch_lookup(struct hash_ops *hops, struct request *req);
+int hopscotch_remove(struct hash_ops *hops, struct request *req);
 
 #endif

@@ -36,9 +36,6 @@ void *ack_poller(void *arg) {
 		recv_ack(sock, &net_ack);
 		req_out(&sem);
 
-		static int cnt = 0;
-		printf("%d, %d, %d\n", cnt++, net_ack.type, net_ack.elapsed_time);
-
 		if (net_ack.type == REQ_TYPE_GET) {
 			collect_latency(cdf_table, net_ack.elapsed_time);
 		}

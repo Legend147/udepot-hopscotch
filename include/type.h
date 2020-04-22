@@ -17,4 +17,9 @@ enum req_type_t:unsigned char {
 	REQ_TYPE_ITERATOR,
 };
 
+enum htable_t {
+	HTABLE_HOPSCOTCH,
+	HTABLE_BIGKV,
+};
+
 #endif

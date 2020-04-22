@@ -10,11 +10,13 @@ uint64_t hashing_key(char *key, uint8_t len) {
 }
 
 ssize_t read_sock(int sock, void *buf, ssize_t count) {
-	ssize_t len = 0;
-	while (len != count) {
-		len += read(sock, &(((char *)buf)[len]), count-len);
+	ssize_t readed = 0, len;
+	while (readed < count) {
+		len = read(sock, &(((char *)buf)[readed]), count-readed);
+		if (len == -1) continue;
+		readed += len;
 	}
-	return len;
+	return readed;
 }
 
 ssize_t send_request(int sock, struct net_req *nr) {

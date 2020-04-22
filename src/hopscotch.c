@@ -5,46 +5,42 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-struct hash_ops hash_ops = {
-	.init = hopscotch_init,
-	.free = hopscotch_free,
-	.insert = hopscotch_insert,
-	.lookup = hopscotch_lookup,
-	.remove = hopscotch_remove,
-};
 struct hash_stat hstat;
-struct hopscotch hs;
 
-int hopscotch_init() {
+int hopscotch_init(struct hash_ops *hops) {
 	printf("===============================\n");
 	printf(" uDepot's Hopscotch Hash-table \n");
 	printf("===============================\n\n");
 
 	printf("hopscotch_init()...\n\n");
 
+	struct hopscotch *hs = (struct hopscotch *)malloc(sizeof(struct hopscotch));
+
 	// Allocate tables
-	hs.table=(struct hash_table *)calloc(NR_TABLE, sizeof(struct hash_table));
+	hs->table=(struct hash_table *)calloc(NR_TABLE, sizeof(struct hash_table));
 	for (int i = 0; i < NR_TABLE; i++) {
 		// entry
-		hs.table[i].entry = (struct hash_entry *)calloc(NR_ENTRY, sizeof(struct hash_entry));
+		hs->table[i].entry = (struct hash_entry *)calloc(NR_ENTRY, sizeof(struct hash_entry));
 		for (int j = 0; j < NR_ENTRY; j++) {
-			hs.table[i].entry[j].pba = PBA_INVALID;
+			hs->table[i].entry[j].pba = PBA_INVALID;
 		}
 	}
 
-	hs.temp_buf = (char *)malloc(TEMP_BUF_SIZE);
+	hops->_private = (void *)hs;
 
 	return 0;
 }
 
-int hopscotch_free() {
+int hopscotch_free(struct hash_ops *hops) {
+	struct hopscotch *hs = (struct hopscotch *)hops->_private;
+
 	printf("hopscotch_free()...\n\n");
 
 	// population
 	uint64_t population = 0;
 	for (int i = 0; i < NR_TABLE; i++) {
 		for (int j = 0; j < NR_ENTRY; j++) {
-			if (hs.table[i].entry[j].pba != PBA_INVALID) {
+			if (hs->table[i].entry[j].pba != PBA_INVALID) {
 				population++;
 			}
 		}
@@ -54,16 +50,17 @@ int hopscotch_free() {
 
 	// cost
 	uint64_t cost_sum = 0;
-	for (int i = 0; i < FLASH_READ_MAX; i++) cost_sum += hs.lookup_cost[i];
+	for (int i = 0; i < FLASH_READ_MAX; i++) cost_sum += hs->lookup_cost[i];
 	for (int i = 0; i < FLASH_READ_MAX; i++) {
-		printf("%d,%lu,%.4f\n", i, hs.lookup_cost[i], (float)hs.lookup_cost[i]/cost_sum*100);
+		printf("%d,%lu,%.4f\n", i, hs->lookup_cost[i], (float)hs->lookup_cost[i]/cost_sum*100);
 	}
 
 	// Free tables
 	for (int i = 0; i < NR_TABLE; i++) {
-		free(hs.table[i].entry);
+		free(hs->table[i].entry);
 	}
-	free(hs.table);
+	free(hs->table);
+	free(hs);
 
 	return 0;
 }
@@ -87,10 +84,11 @@ static void print_entry(struct hash_entry *entry) {
 }
 #endif
 
-static void fill_entry
+static struct hash_entry *fill_entry
 (struct hash_entry *entry, uint8_t offset, uint8_t tag, uint16_t size, uint64_t pba) {
 	*entry = (struct hash_entry){offset, tag, size, (pba & PBA_INVALID)};
 	//print_entry(entry);
+	return entry;
 }
 
 static int find_free_entry(struct hash_table *ht, uint32_t idx) {
@@ -127,28 +125,71 @@ static int find_free_entry(struct hash_table *ht, uint32_t idx) {
 	return -1;
 }
 
-int hopscotch_insert(uint64_t h_key) {
+void *cb_keycmp_insert(void *arg) {
+	struct request *req = (struct request *)arg;
+	struct hop_params *params = (struct hop_params *)req->params;
+
+	if (req->keylen != ((uint8_t *)req->value)[0]) {
+		params->insert_step = HOP_INSERT_KEY_MISMATCH;
+	} else {
+		if (strncmp(req->key, req->value+1, req->keylen) == 0) {
+			params->insert_step = HOP_INSERT_KEY_MATCH;
+		} else {
+			params->insert_step = HOP_INSERT_KEY_MISMATCH;
+		}
+	}
+	retry_req_to_hlr(req->hlr, req);
+	return NULL;
+}
+
+// FIXME
+uint64_t get_pba(uint16_t kv_size) {
+	static uint64_t pba = 0;
+	uint64_t ret = pba;
+	pba += kv_size;
+	return ret;
+}
+
+int hopscotch_insert(struct hash_ops *hops, struct request *req) {
+	struct hopscotch *hs = (struct hopscotch *)hops->_private;
+	struct handler *hlr = req->hlr;
 	int offset = 0;
+
+	hash_t h_key = req->hkey;
 
 	uint32_t idx = h_key & ((1 << IDX_BIT)-1);
 	uint8_t  tag = (uint8_t)(h_key >> IDX_BIT);
 	uint8_t  dir = tag & ((1 << DIR_BIT)-1);
 
-	struct hash_table *ht = &hs.table[dir];
+	struct hash_table *ht = &hs->table[dir];
+	struct hash_entry *entry = NULL;
+	struct callback *cb = NULL;
 
-	int req_flash_read = 0;
+	if (!req->params) req->params = make_hop_params();
+	struct hop_params *params = (struct hop_params *)req->params;
 
+	switch (params->insert_step) {
+	case HOP_INSERT_KEY_MATCH:
+		goto hop_insert_key_match;
+		break;
+	case HOP_INSERT_KEY_MISMATCH:
+		offset = params->offset + 1;
+		goto hop_insert_key_mismatch;
+		break;
+	default:
+		break;
+	}
+
+hop_insert_key_mismatch:
 	// phase 1: find matching tag
-	offset = find_matching_tag(ht, idx, 0, tag);
-	while (offset != -1) {
-		++req_flash_read;
-
-		struct hash_entry *entry = &ht->entry[(idx+offset)%NR_ENTRY];
-		if (entry->pba == (h_key & PBA_INVALID)) {
-			fill_entry(entry, offset, tag, 1, h_key);
-			goto exit;
-		}
-		offset = find_matching_tag(ht, idx, offset+1, tag);
+	offset = find_matching_tag(ht, idx, offset, tag);
+	if (offset != -1) {
+		// read kv-pair to confirm whether it is correct key or not
+		entry = &ht->entry[(idx+offset)%NR_ENTRY];
+		cb = make_callback(cb_keycmp_insert, req);
+		params->offset = offset;
+		hlr->read(hlr, entry->pba, entry->kv_size, req->value, cb);
+		goto exit;
 	}
 
 	// phase 2: find free entry
@@ -157,30 +198,36 @@ int hopscotch_insert(uint64_t h_key) {
 		// error: must resize the table!
 		puts("insert error");
 		abort();
-		goto exit;
 	}
 
+hop_insert_key_match:
 	// phase 3: fill the entry
-	fill_entry(&ht->entry[(idx+offset)%NR_ENTRY], offset, tag, 1, h_key);
+	entry = fill_entry(&ht->entry[(idx+offset)%NR_ENTRY], offset, tag, 2, get_pba(2));
+	cb = make_callback(req->end_req, req);
+	hlr->write(hlr, entry->pba, entry->kv_size, req->value, cb);
 
 exit:
 	return 0;
 }
 
-static void collect_lookup_cost(int nr_read) {
-	if (nr_read < FLASH_READ_MAX) hs.lookup_cost[nr_read]++;
+static void collect_lookup_cost(struct hopscotch *hs, int nr_read) {
+	if (nr_read < FLASH_READ_MAX) hs->lookup_cost[nr_read]++;
 }
 
-int hopscotch_lookup(uint64_t h_key) {
+int hopscotch_lookup(struct hash_ops *hops, struct request *req) {
 	int rc = 0;
 
+	struct hopscotch *hs = (struct hopscotch *)hops->_private;
+
 	int offset = 0;
+
+	hash_t h_key = req->hkey;
 
 	uint32_t idx = h_key & ((1 << IDX_BIT)-1);
 	uint8_t  tag = (uint8_t)(h_key >> IDX_BIT);
 	uint8_t  dir = tag & ((1 << DIR_BIT)-1);
 
-	struct hash_table *ht = &hs.table[dir];
+	struct hash_table *ht = &hs->table[dir];
 
 	int req_flash_read = 0;
 
@@ -199,11 +246,11 @@ int hopscotch_lookup(uint64_t h_key) {
 
 	rc = 1;
 exit:
-	collect_lookup_cost(req_flash_read);
+	collect_lookup_cost(hs, req_flash_read);
 	return rc;
 }
 
-int hopscotch_remove(uint64_t h_key) {
+int hopscotch_remove(struct hash_ops *hops, struct request *req) {
 	// this would be implemented if necessary
 	return 0;
 }

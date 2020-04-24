@@ -43,13 +43,22 @@ struct handler {
 #endif
 };
 
+struct key_struct {
+	uint8_t len;
+	char *key;
+	hash_t hash;
+};
+
+struct val_struct {
+	uint32_t len;
+	char *value;
+};
+
 struct request {
 	req_type_t type;
-	uint8_t keylen;
-	char *key;
-	hash_t hkey;
-	uint32_t val_len;
-	char *value;
+	uint32_t seq_num;
+	struct key_struct key;
+	struct val_struct value;
 
 	stopwatch *sw;
 

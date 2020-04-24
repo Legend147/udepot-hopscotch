@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <semaphore.h>
 #include <pthread.h>
+#include <signal.h>
 
 #define IP "127.0.0.1"
 #define PORT 5555
@@ -17,7 +18,9 @@
 #define NR_QUERY 100000
 #define KEY_LEN  16
 
-#define SRV_QDEPTH 1
+#define CLIENT_QDEPTH 1
+
+bool stopflag;
 
 struct keygen *kg;
 int sock;
@@ -27,14 +30,41 @@ uint32_t seq_num_global;
 
 uint64_t cdf_table[CDF_TABLE_MAX];
 
+static int bench_free() {
+	sleep(5);
+	stopflag=true;
+	int *temp;
+	while (pthread_tryjoin_np(tid, (void **)&temp)) {}
+	keygen_free(kg);
+	close(sock);
+	return 0;
+}
+
+static void client_exit(int sig) {
+	puts("");
+	bench_free();
+	exit(1);
+}
+
+static int sig_add() {
+	struct sigaction sa;
+	sa.sa_handler = client_exit;
+	sigaction(SIGINT, &sa, NULL);
+	return 0;
+}
+
 void *ack_poller(void *arg) {
 	struct net_ack net_ack;
 
 	puts("Bench :: ack_poller() created");
 
 	while (1) {
+		if (stopflag) return NULL;
+
 		recv_ack(sock, &net_ack);
 		req_out(&sem);
+
+		printf("seq_num: %d\n", net_ack.seq_num);
 
 		if (net_ack.type == REQ_TYPE_GET) {
 			collect_latency(cdf_table, net_ack.elapsed_time);
@@ -45,7 +75,7 @@ void *ack_poller(void *arg) {
 static int bench_init() {
 	kg = keygen_init(NR_KEY, KEY_LEN);
 
-	sem_init(&sem, 0, SRV_QDEPTH);
+	sem_init(&sem, 0, CLIENT_QDEPTH);
 
 	pthread_create(&tid, NULL, &ack_poller, NULL);
 
@@ -78,6 +108,7 @@ static int load_kvpairs() {
 
 	net_req.keylen = KEY_LEN;
 	net_req.type = REQ_TYPE_SET;
+	net_req.kv_size = VALUE_LEN;
 	for (size_t i = 0; i < NR_KEY; i++) {
 		req_in(&sem);
 		if (i%(NR_KEY/100)==0) {
@@ -86,10 +117,10 @@ static int load_kvpairs() {
 			fflush(stdout);
 		}
 		memcpy(net_req.key, get_next_key_for_load(kg), KEY_LEN);
-		net_req.seq_num = seq_num_global++;
+		net_req.seq_num = ++seq_num_global;
 		send_request(sock, &net_req);
 	}
-	wait_until_finish(&sem, SRV_QDEPTH);
+	wait_until_finish(&sem, CLIENT_QDEPTH);
 
 	puts("\nLoad finished!");
 
@@ -111,9 +142,10 @@ static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 			fflush(stdout);
 		}
 		memcpy(net_req.key, get_next_key(kg), KEY_LEN);
+		net_req.seq_num = ++seq_num_global;
 		send_request(sock, &net_req);
 	}
-	wait_until_finish(&sem, SRV_QDEPTH);
+	wait_until_finish(&sem, CLIENT_QDEPTH);
 
 	puts("\nBenchmark finished!");
 	print_cdf(cdf_table, NR_QUERY);
@@ -121,13 +153,9 @@ static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 	return 0;
 }
 
-static int bench_free() {
-	keygen_free(kg);
-	close(sock);
-	return 0;
-}
-
 int main(int argc, char *argv[]) {
+	sig_add();
+
 	bench_init();
 
 	/* Connect to server */
@@ -138,11 +166,11 @@ int main(int argc, char *argv[]) {
 
 	/* Benchmark phase */
 	run_bench(KEY_DIST_UNIFORM, 50, 50);
-	run_bench(KEY_DIST_UNIFORM, 50, 50);
-	run_bench(KEY_DIST_LOCALITY, 60, 40);
-	run_bench(KEY_DIST_LOCALITY, 70, 30);
-	run_bench(KEY_DIST_LOCALITY, 80, 20);
-	run_bench(KEY_DIST_LOCALITY, 90, 10);
+//	run_bench(KEY_DIST_UNIFORM, 50, 50);
+//	run_bench(KEY_DIST_LOCALITY, 60, 40);
+//	run_bench(KEY_DIST_LOCALITY, 70, 30);
+//	run_bench(KEY_DIST_LOCALITY, 80, 20);
+//	run_bench(KEY_DIST_LOCALITY, 90, 10);
 
 	bench_free();
 	return 0;

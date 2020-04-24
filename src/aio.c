@@ -1,8 +1,7 @@
 #include "aio.h"
+#include "config.h"
 #include <stdlib.h>
 #include <stdio.h>
-
-#define SOB 512
 
 int aio_read(struct handler *hlr, uint64_t pba,
 	     uint32_t size, char *buf, struct callback *cb) {

@@ -9,6 +9,8 @@
 
 #define NR_EVENTS 64
 
+extern bool stopflag_hlr;
+
 #ifdef LINUX_AIO
 static void *aio_poller(void *input) {
 	int ret;
@@ -23,6 +25,8 @@ static void *aio_poller(void *input) {
 	struct timespec timeout = { 0, 0 };
 
 	while (1) {
+		if (stopflag_hlr) return NULL;
+
 		if ((ret = io_getevents(ctx, 0, NR_EVENTS, events, &timeout))) {
 			for (int i = 0; i < ret; i++) {
 				ev = &events[i];
@@ -36,6 +40,7 @@ static void *aio_poller(void *input) {
 				}
 
 				cb->func(cb->arg);
+				free(ev->data);
 				free(ev->obj);
 			}
 		}

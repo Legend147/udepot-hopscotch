@@ -16,6 +16,7 @@ struct net_req {
 	req_type_t type;
 	uint8_t keylen;
 	char key[KEY_LEN];
+	uint32_t kv_size;
 
 	uint32_t seq_num;
 };

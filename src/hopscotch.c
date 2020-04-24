@@ -7,6 +7,11 @@
 
 struct hash_stat hstat;
 
+static void copy_key_to_value(struct key_struct *key, struct val_struct *value) {
+	memcpy(value->value, &key->len, sizeof(key->len));
+	memcpy(value->value+sizeof(key->len), key->key, key->len);
+}
+
 int hopscotch_init(struct hash_ops *hops) {
 	printf("===============================\n");
 	printf(" uDepot's Hopscotch Hash-table \n");
@@ -113,7 +118,7 @@ static int find_free_entry(struct hash_table *ht, uint32_t idx) {
 			int dis_idx = (ori_idx + dis_off) % NR_ENTRY;
 			struct hash_entry *dis_entry = &ht->entry[dis_idx];
 			if (dis_entry->pba == PBA_INVALID) {
-				fill_entry(dis_entry, dis_off, entry->key_fp_tag, 1, entry->pba);
+				fill_entry(dis_entry, dis_off, entry->key_fp_tag, entry->kv_size, entry->pba);
 				return offset;
 			}
 		}
@@ -125,19 +130,51 @@ static int find_free_entry(struct hash_table *ht, uint32_t idx) {
 	return -1;
 }
 
-void *cb_keycmp_insert(void *arg) {
+static int keycmp_k_v(struct key_struct *key, struct val_struct *value) {
+	if (key->len != ((uint8_t *)value->value)[0]) {
+		return (key->len > ((uint8_t *)value->value)[0]) ? 1:-1;
+	}
+	return strncmp(key->key, value->value+(sizeof(uint8_t)), key->len);
+}
+
+void *cb_keycmp(void *arg) {
 	struct request *req = (struct request *)arg;
 	struct hop_params *params = (struct hop_params *)req->params;
 
-	if (req->keylen != ((uint8_t *)req->value)[0]) {
-		params->insert_step = HOP_INSERT_KEY_MISMATCH;
-	} else {
-		if (strncmp(req->key, req->value+1, req->keylen) == 0) {
-			params->insert_step = HOP_INSERT_KEY_MATCH;
+	struct key_struct *key = &req->key;
+	struct val_struct *value = &req->value;
+
+	switch (req->type) {
+	case REQ_TYPE_GET:
+		if (keycmp_k_v(key, value) == 0) {
+			params->lookup_step = HOP_STEP_KEY_MATCH;
+			req->end_req(req);
+			return NULL;
 		} else {
-			params->insert_step = HOP_INSERT_KEY_MISMATCH;
+			params->lookup_step = HOP_STEP_KEY_MISMATCH;
+		}
+		break;
+	case REQ_TYPE_SET:
+		if (keycmp_k_v(key, value) == 0) {
+			params->insert_step = HOP_STEP_KEY_MATCH;
+		} else {
+			params->insert_step = HOP_STEP_KEY_MISMATCH;
+		}
+		break;
+	default:
+		fprintf(stderr, "Wrong req type on cb_keycmp");
+		break;
+	}
+
+	////////// test
+	if (params->insert_step == HOP_STEP_KEY_MISMATCH) {
+		static int cnt = 0;
+		if (++cnt % 1024 == 0) {
+			printf("Insert key mismatch! : %d\n", cnt);
 		}
 	}
+	//////////
+
 	retry_req_to_hlr(req->hlr, req);
 	return NULL;
 }
@@ -155,7 +192,7 @@ int hopscotch_insert(struct hash_ops *hops, struct request *req) {
 	struct handler *hlr = req->hlr;
 	int offset = 0;
 
-	hash_t h_key = req->hkey;
+	hash_t h_key = req->key.hash;
 
 	uint32_t idx = h_key & ((1 << IDX_BIT)-1);
 	uint8_t  tag = (uint8_t)(h_key >> IDX_BIT);
@@ -169,10 +206,11 @@ int hopscotch_insert(struct hash_ops *hops, struct request *req) {
 	struct hop_params *params = (struct hop_params *)req->params;
 
 	switch (params->insert_step) {
-	case HOP_INSERT_KEY_MATCH:
+	case HOP_STEP_KEY_MATCH:
+		offset = params->offset;
 		goto hop_insert_key_match;
 		break;
-	case HOP_INSERT_KEY_MISMATCH:
+	case HOP_STEP_KEY_MISMATCH:
 		offset = params->offset + 1;
 		goto hop_insert_key_mismatch;
 		break;
@@ -186,9 +224,9 @@ hop_insert_key_mismatch:
 	if (offset != -1) {
 		// read kv-pair to confirm whether it is correct key or not
 		entry = &ht->entry[(idx+offset)%NR_ENTRY];
-		cb = make_callback(cb_keycmp_insert, req);
+		cb = make_callback(cb_keycmp, req);
 		params->offset = offset;
-		hlr->read(hlr, entry->pba, entry->kv_size, req->value, cb);
+		hlr->read(hlr, entry->pba, entry->kv_size, req->value.value, cb);
 		goto exit;
 	}
 
@@ -202,51 +240,67 @@ hop_insert_key_mismatch:
 
 hop_insert_key_match:
 	// phase 3: fill the entry
-	entry = fill_entry(&ht->entry[(idx+offset)%NR_ENTRY], offset, tag, 2, get_pba(2));
+	entry = fill_entry(&ht->entry[(idx+offset)%NR_ENTRY], offset, tag, req->value.len/SOB, get_pba(req->value.len/SOB));
+
 	cb = make_callback(req->end_req, req);
-	hlr->write(hlr, entry->pba, entry->kv_size, req->value, cb);
+	copy_key_to_value(&req->key, &req->value);
+	hlr->write(hlr, entry->pba, entry->kv_size, req->value.value, cb);
 
 exit:
 	return 0;
 }
 
+
+#if 0
 static void collect_lookup_cost(struct hopscotch *hs, int nr_read) {
 	if (nr_read < FLASH_READ_MAX) hs->lookup_cost[nr_read]++;
 }
+#endif
 
 int hopscotch_lookup(struct hash_ops *hops, struct request *req) {
 	int rc = 0;
 
 	struct hopscotch *hs = (struct hopscotch *)hops->_private;
-
+	struct handler *hlr = req->hlr;
 	int offset = 0;
 
-	hash_t h_key = req->hkey;
+	hash_t h_key = req->key.hash;
 
 	uint32_t idx = h_key & ((1 << IDX_BIT)-1);
 	uint8_t  tag = (uint8_t)(h_key >> IDX_BIT);
 	uint8_t  dir = tag & ((1 << DIR_BIT)-1);
 
 	struct hash_table *ht = &hs->table[dir];
+	struct hash_entry *entry = NULL;
+	struct callback *cb = NULL;
 
-	int req_flash_read = 0;
+	if (!req->params) req->params = make_hop_params();
+	struct hop_params *params = (struct hop_params *)req->params;
 
-	offset = find_matching_tag(ht, idx, 0, tag);
-	while (offset != -1) {
-		++req_flash_read;
-		usleep(1);
-
-		struct hash_entry *entry = &ht->entry[(idx+offset)%NR_ENTRY];
-		if (entry->pba == (h_key & PBA_INVALID)) {
-			rc = 0;
-			goto exit;
-		}
-		offset = find_matching_tag(ht, idx, offset+1, tag);
+	switch (params->lookup_step) {
+	case HOP_STEP_KEY_MISMATCH:
+		offset = params->offset + 1;
+		goto hop_lookup_key_mismatch;
+		break;
+	case HOP_STEP_INIT:
+	case HOP_STEP_KEY_MATCH:
+	default:
+		break;
 	}
 
+hop_lookup_key_mismatch:
+	offset = find_matching_tag(ht, idx, offset, tag);
+	if (offset != -1) {
+		entry = &ht->entry[(idx+offset)%NR_ENTRY];
+		cb = make_callback(cb_keycmp, req);
+		params->offset = offset;
+		hlr->read(hlr, entry->pba, entry->kv_size, req->value.value, cb);
+		goto exit;
+	}
+
+	// case of "not existing key"
 	rc = 1;
 exit:
-	collect_lookup_cost(hs, req_flash_read);
 	return rc;
 }
 

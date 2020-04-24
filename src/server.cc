@@ -13,15 +13,12 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-stopwatch *sw;
 int sv_sock, cl_sock;
-char ack;
 struct handler *hlr;
 
 static void server_exit(int sig) {
 	puts("");
 	handler_free(hlr);
-	sw_destroy(sw);
 	close(cl_sock);
 	close(sv_sock);
 	exit(1);

@@ -40,20 +40,22 @@ struct hopscotch {
 };
 
 enum {
-	HOP_INSERT_INIT,
-	HOP_INSERT_KEY_MATCH,
-	HOP_INSERT_KEY_MISMATCH,
+	HOP_STEP_INIT,
+	HOP_STEP_KEY_MATCH,
+	HOP_STEP_KEY_MISMATCH,
 };
 
 struct hop_params {
 	int offset;
+	int lookup_step;
 	int insert_step;
 };
 
 static inline struct hop_params *make_hop_params() {
 	struct hop_params *hp = (struct hop_params *)malloc(sizeof(struct hop_params));
 	hp->offset = 0;
-	hp->insert_step = HOP_INSERT_INIT;
+	hp->lookup_step = HOP_STEP_INIT;
+	hp->insert_step = HOP_STEP_INIT;
 	return hp;
 }
 

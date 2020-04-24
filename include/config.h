@@ -8,8 +8,14 @@
 #define PAGESIZE 4096
 #define AVAIL_MEMORY (1 << 27)
 
+#define SOB 512
+
 #define KEY_LEN 16
 #define VALUE_LEN 1024
+
+#define VALUE_LEN_MAX VALUE_LEN
+
+#define MEM_ALIGN_UNIT 4096
 
 #define CDF_TABLE_MAX 100000
 

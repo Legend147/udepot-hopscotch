@@ -6,11 +6,10 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <errno.h>
 
 int global_number;
 
-extern int errno;
+bool stopflag_hlr;
 
 struct handler *handler_init(htable_t ht_type) {
 	struct handler *hlr = (struct handler *)malloc(sizeof(struct handler));
@@ -38,7 +37,7 @@ struct handler *handler_init(htable_t ht_type) {
 	q_init(&hlr->req_q, QSIZE);
 	q_init(&hlr->retry_q, QSIZE);
 
-	hlr->dev_fd = open("/dev/nvme0n1", O_RDWR | O_CREAT | O_DIRECT, 0666);
+	hlr->dev_fd = open("/dev/nvme2n1", O_RDWR | O_CREAT | O_DIRECT, 0666);
 	if (hlr->dev_fd < 0) {
 		perror("device open");
 		abort();
@@ -47,13 +46,9 @@ struct handler *handler_init(htable_t ht_type) {
 	hlr->read = aio_read;
 	hlr->write = aio_write;
 
-	int ret = 0;
-	ret = io_setup(1, &hlr->aio_ctx);
-	printf("%d\n", ret);
-	if (ret != 0) {
-		fprintf(stderr, "%d\n", errno);
-		perror("io_submit");
-		fprintf(stderr, "%s\n", strerror(errno));
+	memset(&hlr->aio_ctx, 0, sizeof(io_context_t));
+	if (io_setup(128, &hlr->aio_ctx) < 0) {
+		perror("io_setup");
 		abort();
 	}
 
@@ -65,6 +60,7 @@ struct handler *handler_init(htable_t ht_type) {
 
 void handler_free(struct handler *hlr) {
 	int *temp;
+	stopflag_hlr=true;
 	while (pthread_tryjoin_np(hlr->hlr_tid, (void **)&temp)) {
 		//cl_release(hlr->cond);
 	}
@@ -120,19 +116,18 @@ void *request_handler(void *input) {
 	sprintf(thread_name, "%s[%d]", "request_handler", hlr->number);
 	pthread_setname_np(pthread_self(), thread_name);
 
-	printf("%s launched\n", thread_name);
+	printf("handler: %s launched\n", thread_name);
 
 	while (1) {
-		//cl_grap(hlr->cond);
+		if (stopflag_hlr && (hlr->flying->now==0)) return NULL;
+
 		if (!(req=get_next_request(hlr))) {
-			//cl_release(hlr->cond);
 			continue;
 		}
 
 		switch (req->type) {
 		case REQ_TYPE_SET:
 			rc = hops->insert(hops, req);
-			req->end_req(req);
 			break;	
 		case REQ_TYPE_GET:
 			rc = hops->lookup(hops, req);
@@ -140,7 +135,6 @@ void *request_handler(void *input) {
 				puts("Not existing key!");
 				abort();
 			}
-			req->end_req(req);
 			break;
 		case REQ_TYPE_DELETE:
 		case REQ_TYPE_RANGE:

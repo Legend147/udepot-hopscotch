@@ -12,8 +12,8 @@ CFLAGS += \
 	-g \
 	-Wall \
 	-std=c++11 \
-	-O2 \
-#	-fsanitize=address \
+	-fsanitize=address \
+#	-O2 \
 
 LIBS += \
 	-lcityhash \

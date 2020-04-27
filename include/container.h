@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <libaio.h>
-#include "ops.h"
+#include "kv_ops.h"
 #include "type.h"
 #include "cond_lock.h"
 #include "queue.h"
@@ -58,7 +58,7 @@ struct handler {
 	int number;
 	pthread_t hlr_tid, plr_tid;
 
-	struct hash_ops *hops;
+	struct kv_ops *ops;
 
 	cl_lock *flying;
 

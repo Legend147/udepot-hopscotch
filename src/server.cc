@@ -1,10 +1,6 @@
-#include "type.h"
-#include "ops.h"
-#include "config.h"
-#include "hopscotch.h"
 #include "util.h"
-#include "stopwatch.h"
 #include "handler.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

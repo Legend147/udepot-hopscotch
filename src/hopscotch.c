@@ -1,18 +1,16 @@
 #include "type.h"
-#include "ops.h"
+#include "kv_ops.h"
 #include "hopscotch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-struct hash_stat hstat;
 
 static void copy_key_to_value(struct key_struct *key, struct val_struct *value) {
 	memcpy(value->value, &key->len, sizeof(key->len));
 	memcpy(value->value+sizeof(key->len), key->key, key->len);
 }
 
-int hopscotch_init(struct hash_ops *hops) {
+int hopscotch_init(struct kv_ops *ops) {
 	printf("===============================\n");
 	printf(" uDepot's Hopscotch Hash-table \n");
 	printf("===============================\n\n");
@@ -31,13 +29,13 @@ int hopscotch_init(struct hash_ops *hops) {
 		}
 	}
 
-	hops->_private = (void *)hs;
+	ops->_private = (void *)hs;
 
 	return 0;
 }
 
-int hopscotch_free(struct hash_ops *hops) {
-	struct hopscotch *hs = (struct hopscotch *)hops->_private;
+int hopscotch_free(struct kv_ops *ops) {
+	struct hopscotch *hs = (struct hopscotch *)ops->_private;
 
 	printf("hopscotch_free()...\n\n");
 
@@ -187,8 +185,8 @@ uint64_t get_pba(uint16_t kv_size) {
 	return ret;
 }
 
-int hopscotch_insert(struct hash_ops *hops, struct request *req) {
-	struct hopscotch *hs = (struct hopscotch *)hops->_private;
+int hopscotch_set(struct kv_ops *ops, struct request *req) {
+	struct hopscotch *hs = (struct hopscotch *)ops->_private;
 	struct handler *hlr = req->hlr;
 	int offset = 0;
 	uint64_t pba;
@@ -264,10 +262,10 @@ static void collect_lookup_cost(struct hopscotch *hs, int nr_read) {
 }
 #endif
 
-int hopscotch_lookup(struct hash_ops *hops, struct request *req) {
+int hopscotch_get(struct kv_ops *ops, struct request *req) {
 	int rc = 0;
 
-	struct hopscotch *hs = (struct hopscotch *)hops->_private;
+	struct hopscotch *hs = (struct hopscotch *)ops->_private;
 	struct handler *hlr = req->hlr;
 	int offset = 0;
 
@@ -315,7 +313,7 @@ exit:
 	return rc;
 }
 
-int hopscotch_remove(struct hash_ops *hops, struct request *req) {
+int hopscotch_delete(struct kv_ops *ops, struct request *req) {
 	// this would be implemented if necessary
 	return 0;
 }

@@ -59,10 +59,10 @@ static inline struct hop_params *make_hop_params() {
 	return hp;
 }
 
-int hopscotch_init(struct hash_ops *hops);
-int hopscotch_free(struct hash_ops *hops);
-int hopscotch_insert(struct hash_ops *hops, struct request *req);
-int hopscotch_lookup(struct hash_ops *hops, struct request *req);
-int hopscotch_remove(struct hash_ops *hops, struct request *req);
+int hopscotch_init(struct kv_ops *ops);
+int hopscotch_free(struct kv_ops *ops);
+int hopscotch_get(struct kv_ops *ops, struct request *req);
+int hopscotch_set(struct kv_ops *ops, struct request *req);
+int hopscotch_delete(struct kv_ops *ops, struct request *req);
 
 #endif

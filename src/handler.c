@@ -1,5 +1,5 @@
 #include "handler.h"
-#include "ops.h"
+#include "kv_ops.h"
 #include "hopscotch.h"
 #include "aio.h"
 #include "device.h"
@@ -8,30 +8,30 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-int global_number;
+int global_hlr_number;
 
 bool stopflag_hlr;
 
 struct handler *handler_init(htable_t ht_type) {
-	struct handler *hlr = (struct handler *)malloc(sizeof(struct handler));
+	struct handler *hlr = (struct handler *)calloc(sizeof(struct handler),1);
 
-	hlr->number = global_number++;
+	hlr->number = global_hlr_number++;
 
-	hlr->hops = (struct hash_ops *)malloc(sizeof(struct hash_ops));
+	hlr->ops = (struct kv_ops *)calloc(sizeof(struct kv_ops),1);
 	switch (ht_type) {
 	case HTABLE_HOPSCOTCH:
-		hlr->hops->init = hopscotch_init;
-		hlr->hops->free = hopscotch_free;
-		hlr->hops->insert = hopscotch_insert;
-		hlr->hops->lookup = hopscotch_lookup;
-		hlr->hops->remove = hopscotch_remove;
+		hlr->ops->init = hopscotch_init;
+		hlr->ops->free = hopscotch_free;
+		hlr->ops->get_kv = hopscotch_get;
+		hlr->ops->set_kv = hopscotch_set;
+		hlr->ops->delete_kv = hopscotch_delete;
 		break;
 	case HTABLE_BIGKV:
 	default:
 		fprintf(stderr, "Wrong hash-table type!");
 	}
 
-	hlr->hops->init(hlr->hops);
+	hlr->ops->init(hlr->ops);
 
 	hlr->flying = cl_init(QDEPTH, false);
 	//hlr->cond = cl_init(QDEPTH, true);
@@ -64,7 +64,10 @@ void handler_free(struct handler *hlr) {
 	while (pthread_tryjoin_np(hlr->plr_tid, (void **)&temp)) {
 		//cl_release(hlr->cond);
 	}
-	hlr->hops->free(hlr->hops);
+
+	print_kv_ops_stat(&hlr->ops->stat);
+	hlr->ops->free(hlr->ops);
+
 	q_free(hlr->req_q);
 	q_free(hlr->retry_q);
 
@@ -73,7 +76,7 @@ void handler_free(struct handler *hlr) {
 	io_destroy(hlr->aio_ctx);
 
 	free(hlr);
-} 
+}
 
 int forward_req_to_hlr(struct handler *hlr, struct request *req) {
 	int rc = 0;
@@ -108,7 +111,7 @@ void *request_handler(void *input) {
 
 	struct request *req = NULL;
 	struct handler *hlr = (struct handler *)input;
-	struct hash_ops *hops = hlr->hops;
+	struct kv_ops *ops = hlr->ops;
 
 	char thread_name[128] = {0};
 	sprintf(thread_name, "%s[%d]", "request_handler", hlr->number);
@@ -125,10 +128,10 @@ void *request_handler(void *input) {
 
 		switch (req->type) {
 		case REQ_TYPE_SET:
-			rc = hops->insert(hops, req);
+			rc = ops->get_kv(ops, req);
 			break;	
 		case REQ_TYPE_GET:
-			rc = hops->lookup(hops, req);
+			rc = ops->set_kv(ops, req);
 			if (rc) {
 				puts("Not existing key!");
 				abort();

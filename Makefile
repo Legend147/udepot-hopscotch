@@ -12,8 +12,8 @@ CFLAGS += \
 	-g \
 	-Wall \
 	-std=c++11 \
-	-fsanitize=address \
-#	-O2 \
+	-O2 \
+#	-fsanitize=address \
 
 LIBS += \
 	-lcityhash \
@@ -34,6 +34,7 @@ OBJ_SRC += \
 	$(SRC_DIR)/request.c \
 	$(SRC_DIR)/handler.c \
 	$(SRC_DIR)/request.c \
+	$(SRC_DIR)/device.c \
 	$(SRC_DIR)/poller.c \
 	$(SRC_DIR)/aio.c \
 
@@ -43,9 +44,11 @@ TARGET_OBJ =\
 all: client server
 
 client: $(SRC_DIR)/client.cc $(LIB_DIR)/libdfhash.a
+	@mkdir -p $(BIN_DIR)
 	$(CC) -o $(BIN_DIR)/$@ $^ $(CFLAGS) $(LIBS) $(DEFS) -I$(INC_DIR) 
 
 server: $(SRC_DIR)/server.cc $(OBJ_DIR)/$(TARGET).o $(LIB_DIR)/libdfhash.a
+	@mkdir -p $(BIN_DIR)
 	$(CC) -o $(BIN_DIR)/$@ $^ $(CFLAGS) $(LIBS) $(DEFS) -I$(INC_DIR)
 
 $(OBJ_DIR)/$(TARGET).o: $(SRC_DIR)/$(TARGET).c

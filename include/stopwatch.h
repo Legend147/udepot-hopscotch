@@ -50,4 +50,14 @@ static inline time_t sw_get_usec(stopwatch *sw) {
 	return usec;
 }
 
+static inline double sw_get_sec(stopwatch *sw) {
+	time_t sec = sw->end.tv_sec - sw->start.tv_sec;
+	time_t usec = sw->end.tv_usec - sw->start.tv_usec;
+
+	double ret = sec;
+	ret += (double)usec/1000000;
+
+	return ret;
+}
+
 #endif

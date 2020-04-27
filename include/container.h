@@ -9,6 +9,38 @@
 #include "cond_lock.h"
 #include "queue.h"
 #include "stopwatch.h"
+#include "device.h"
+
+/* Each device is devided into fixed-size segments */
+struct segment {
+	uint32_t idx;
+	seg_state_t state;
+
+	uint64_t start_addr;
+	uint64_t end_addr;
+	uint64_t offset;
+};
+
+/* Device abstraction */
+struct dev_abs {
+	char dev_name[128];
+	int dev_fd;
+
+	uint32_t nr_logical_block;
+	uint32_t logical_block_size;
+	uint64_t size_in_byte;
+
+	uint64_t segment_size;
+	uint32_t nr_segment;
+
+	struct segment *seg_array;
+
+	struct segment *staged_seg;
+	uint32_t staged_seg_idx;
+	void *staged_seg_buf;
+
+	uint32_t grain_unit;
+};
 
 struct callback {
 	void *(*func)(void *);
@@ -33,9 +65,12 @@ struct handler {
 	queue *req_q;
 	queue *retry_q;
 
-	int dev_fd;
-	int (*read)(struct handler *hlr, uint64_t pba, uint32_t size, char *buf, struct callback *cb);
-	int (*write)(struct handler *hlr, uint64_t pba, uint32_t size, char *buf, struct callback *cb);
+	struct dev_abs *dev;
+
+	int (*read)(struct handler *, uint64_t, uint32_t, char *,
+		    struct callback *);
+	int (*write)(struct handler *, uint64_t, uint32_t, char *,
+		     struct callback *);
 
 #ifdef LINUX_AIO
 	io_context_t aio_ctx;
@@ -69,6 +104,5 @@ struct request {
 
 	int cl_sock;
 };
-
 
 #endif

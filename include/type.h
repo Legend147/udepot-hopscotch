@@ -9,6 +9,12 @@
 
 typedef uint64_t hash_t;
 
+enum seg_state_t:unsigned char {
+	SEG_STATE_FREE,
+	SEG_STATE_STAGED,
+	SEG_STATE_USED,
+};
+
 enum req_type_t:unsigned char {
 	REQ_TYPE_SET,
 	REQ_TYPE_GET,

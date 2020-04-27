@@ -7,7 +7,7 @@
 // TODO: include spdk
 #endif
 
-#define NR_EVENTS 64
+#define NR_EVENTS QDEPTH
 
 extern bool stopflag_hlr;
 

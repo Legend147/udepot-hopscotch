@@ -1,6 +1,7 @@
 #include "keygen.h"
 #include "util.h"
 #include "config.h"
+#include "stopwatch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,11 +15,13 @@
 #define IP "127.0.0.1"
 #define PORT 5555
 
-#define NR_KEY   100000
-#define NR_QUERY 100000
+#define NR_KEY   50000000
+#define NR_QUERY 50000000
+//#define NR_KEY   100000
+//#define NR_QUERY 100000
 #define KEY_LEN  16
 
-#define CLIENT_QDEPTH 1
+#define CLIENT_QDEPTH 256
 
 bool stopflag;
 
@@ -29,6 +32,8 @@ pthread_t tid;
 uint32_t seq_num_global;
 
 uint64_t cdf_table[CDF_TABLE_MAX];
+
+stopwatch *sw;
 
 static int bench_free() {
 	sleep(5);
@@ -64,8 +69,6 @@ void *ack_poller(void *arg) {
 		recv_ack(sock, &net_ack);
 		req_out(&sem);
 
-		printf("seq_num: %d\n", net_ack.seq_num);
-
 		if (net_ack.type == REQ_TYPE_GET) {
 			collect_latency(cdf_table, net_ack.elapsed_time);
 		}
@@ -78,6 +81,8 @@ static int bench_init() {
 	sem_init(&sem, 0, CLIENT_QDEPTH);
 
 	pthread_create(&tid, NULL, &ack_poller, NULL);
+
+	sw = sw_create();
 
 	return 0;
 }
@@ -109,6 +114,8 @@ static int load_kvpairs() {
 	net_req.keylen = KEY_LEN;
 	net_req.type = REQ_TYPE_SET;
 	net_req.kv_size = VALUE_LEN;
+
+	sw_start(sw);
 	for (size_t i = 0; i < NR_KEY; i++) {
 		req_in(&sem);
 		if (i%(NR_KEY/100)==0) {
@@ -121,8 +128,11 @@ static int load_kvpairs() {
 		send_request(sock, &net_req);
 	}
 	wait_until_finish(&sem, CLIENT_QDEPTH);
+	sw_end(sw);
 
 	puts("\nLoad finished!");
+	printf("%.4f seconds elapsed...\n", sw_get_sec(sw));
+	printf("Throughput(IOPS): %.2f\n\n", (double)NR_KEY/sw_get_sec(sw));
 
 	return 0;
 }
@@ -134,6 +144,8 @@ static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 	net_req.type = REQ_TYPE_GET;
 
 	set_key_dist(kg, dist, query_ratio, hotset_ratio);
+
+	sw_start(sw);
 	for (size_t i = 0; i < NR_QUERY; i++) {
 		req_in(&sem);
 		if (i%(NR_QUERY/100)==0) {
@@ -146,9 +158,12 @@ static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 		send_request(sock, &net_req);
 	}
 	wait_until_finish(&sem, CLIENT_QDEPTH);
+	sw_end(sw);
 
 	puts("\nBenchmark finished!");
 	print_cdf(cdf_table, NR_QUERY);
+	printf("%.4f seconds elapsed...\n", sw_get_sec(sw));
+	printf("Throughput(IOPS): %.2f\n\n", (double)NR_QUERY/sw_get_sec(sw));
 
 	return 0;
 }
@@ -166,11 +181,11 @@ int main(int argc, char *argv[]) {
 
 	/* Benchmark phase */
 	run_bench(KEY_DIST_UNIFORM, 50, 50);
-//	run_bench(KEY_DIST_UNIFORM, 50, 50);
-//	run_bench(KEY_DIST_LOCALITY, 60, 40);
-//	run_bench(KEY_DIST_LOCALITY, 70, 30);
-//	run_bench(KEY_DIST_LOCALITY, 80, 20);
-//	run_bench(KEY_DIST_LOCALITY, 90, 10);
+	run_bench(KEY_DIST_UNIFORM, 50, 50);
+	run_bench(KEY_DIST_LOCALITY, 60, 40);
+	run_bench(KEY_DIST_LOCALITY, 70, 30);
+	run_bench(KEY_DIST_LOCALITY, 80, 20);
+	run_bench(KEY_DIST_LOCALITY, 90, 10);
 
 	bench_free();
 	return 0;

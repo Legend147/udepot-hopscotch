@@ -2,6 +2,7 @@
 #include "ops.h"
 #include "hopscotch.h"
 #include "aio.h"
+#include "device.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -37,17 +38,13 @@ struct handler *handler_init(htable_t ht_type) {
 	q_init(&hlr->req_q, QSIZE);
 	q_init(&hlr->retry_q, QSIZE);
 
-	hlr->dev_fd = open("/dev/nvme2n1", O_RDWR | O_CREAT | O_DIRECT, 0666);
-	if (hlr->dev_fd < 0) {
-		perror("device open");
-		abort();
-	}
+	hlr->dev = dev_abs_init("/dev/nvme6n1");
 
-	hlr->read = aio_read;
-	hlr->write = aio_write;
+	hlr->read = dev_abs_read;
+	hlr->write = dev_abs_write;
 
 	memset(&hlr->aio_ctx, 0, sizeof(io_context_t));
-	if (io_setup(128, &hlr->aio_ctx) < 0) {
+	if (io_setup(QDEPTH, &hlr->aio_ctx) < 0) {
 		perror("io_setup");
 		abort();
 	}
@@ -71,7 +68,8 @@ void handler_free(struct handler *hlr) {
 	q_free(hlr->req_q);
 	q_free(hlr->retry_q);
 
-	close(hlr->dev_fd);
+	dev_abs_free(hlr->dev);
+
 	io_destroy(hlr->aio_ctx);
 
 	free(hlr);

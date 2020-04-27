@@ -169,7 +169,7 @@ void *cb_keycmp(void *arg) {
 	////////// test
 	if (params->insert_step == HOP_STEP_KEY_MISMATCH) {
 		static int cnt = 0;
-		if (++cnt % 1024 == 0) {
+		if (++cnt % 10240 == 0) {
 			printf("Insert key mismatch! : %d\n", cnt);
 		}
 	}
@@ -191,6 +191,7 @@ int hopscotch_insert(struct hash_ops *hops, struct request *req) {
 	struct hopscotch *hs = (struct hopscotch *)hops->_private;
 	struct handler *hlr = req->hlr;
 	int offset = 0;
+	uint64_t pba;
 
 	hash_t h_key = req->key.hash;
 
@@ -204,6 +205,10 @@ int hopscotch_insert(struct hash_ops *hops, struct request *req) {
 
 	if (!req->params) req->params = make_hop_params();
 	struct hop_params *params = (struct hop_params *)req->params;
+
+	if (strncmp(req->key.key, "user765417060341", 16) == 0) {
+		puts("here");
+	}
 
 	switch (params->insert_step) {
 	case HOP_STEP_KEY_MATCH:
@@ -234,13 +239,15 @@ hop_insert_key_mismatch:
 	offset = find_free_entry(ht, idx);
 	if (offset == -1) {
 		// error: must resize the table!
-		puts("insert error");
+		fprintf(stderr, "Insert error: Need to resize the table");
 		abort();
 	}
 
 hop_insert_key_match:
 	// phase 3: fill the entry
-	entry = fill_entry(&ht->entry[(idx+offset)%NR_ENTRY], offset, tag, req->value.len/SOB, get_pba(req->value.len/SOB));
+	pba = get_next_pba(hlr, req->value.len);
+
+	entry = fill_entry(&ht->entry[(idx+offset)%NR_ENTRY], offset, tag, req->value.len/SOB, pba);
 
 	cb = make_callback(req->end_req, req);
 	copy_key_to_value(&req->key, &req->value);
@@ -276,6 +283,10 @@ int hopscotch_lookup(struct hash_ops *hops, struct request *req) {
 
 	if (!req->params) req->params = make_hop_params();
 	struct hop_params *params = (struct hop_params *)req->params;
+
+	if (strncmp(req->key.key, "user765417060341", 16) == 0) {
+		puts("here");
+	}
 
 	switch (params->lookup_step) {
 	case HOP_STEP_KEY_MISMATCH:

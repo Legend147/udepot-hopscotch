@@ -1,4 +1,5 @@
 #include "device.h"
+#include "config.h"
 #include "aio.h"
 #include <fcntl.h>
 #include <linux/fs.h>

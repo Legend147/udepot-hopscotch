@@ -5,9 +5,10 @@
 #ifndef __HOPSCOTCH_H__
 #define __HOPSCOTCH_H__
 
-#include <stdint.h>
 #include "config.h"
 #include "handler.h"
+
+#include <stdint.h>
 
 #define IDX_BIT 27
 #define DIR_BIT 0

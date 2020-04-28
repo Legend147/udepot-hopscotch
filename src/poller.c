@@ -1,5 +1,6 @@
 #include "handler.h"
 #include <errno.h>
+#include <stdio.h>
 
 #ifdef LINUX_AIO
 #include <libaio.h>

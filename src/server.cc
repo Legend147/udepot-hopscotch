@@ -1,5 +1,6 @@
 #include "util.h"
 #include "handler.h"
+#include "request.h"
 
 #include <stdio.h>
 #include <stdlib.h>

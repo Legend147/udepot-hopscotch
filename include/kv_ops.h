@@ -5,8 +5,9 @@
 #ifndef __KV_OPS_H__
 #define __KV_OPS_H__
 
+#include <stdio.h>
 #include <stdint.h>
-#include "container.h"
+#include "request.h"
 
 struct kv_ops_stat {
 	uint64_t get_kv_cnt;

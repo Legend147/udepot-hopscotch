@@ -1,6 +1,7 @@
 #include "handler.h"
 #include "kv_ops.h"
 #include "hopscotch.h"
+//#include "bigkv_index.h"
 #include "aio.h"
 #include "device.h"
 #include <stdlib.h>
@@ -20,13 +21,19 @@ struct handler *handler_init(htable_t ht_type) {
 	hlr->ops = (struct kv_ops *)calloc(sizeof(struct kv_ops),1);
 	switch (ht_type) {
 	case HTABLE_HOPSCOTCH:
+	case HTABLE_BIGKV:
 		hlr->ops->init = hopscotch_init;
 		hlr->ops->free = hopscotch_free;
 		hlr->ops->get_kv = hopscotch_get;
 		hlr->ops->set_kv = hopscotch_set;
 		hlr->ops->delete_kv = hopscotch_delete;
 		break;
-	case HTABLE_BIGKV:
+/*		hlr->ops->init = bigkv_index_init;
+		hlr->ops->free = bigkv_index_free;
+		hlr->ops->get_kv = bigkv_index_get;
+		hlr->ops->set_kv = bigkv_index_set;
+		hlr->ops->delete_kv = bigkv_index_delete;
+		break;  */
 	default:
 		fprintf(stderr, "Wrong hash-table type!");
 	}
@@ -38,13 +45,13 @@ struct handler *handler_init(htable_t ht_type) {
 	q_init(&hlr->req_q, QSIZE);
 	q_init(&hlr->retry_q, QSIZE);
 
-	hlr->dev = dev_abs_init("/dev/nvme6n1");
+	hlr->dev = dev_abs_init("/dev/nvme13n1");
 
 	hlr->read = dev_abs_read;
 	hlr->write = dev_abs_write;
 
 	memset(&hlr->aio_ctx, 0, sizeof(io_context_t));
-	if (io_setup(QDEPTH, &hlr->aio_ctx) < 0) {
+	if (io_setup(QDEPTH*2, &hlr->aio_ctx) < 0) {
 		perror("io_setup");
 		abort();
 	}
@@ -67,11 +74,15 @@ void handler_free(struct handler *hlr) {
 
 	print_kv_ops_stat(&hlr->ops->stat);
 	hlr->ops->free(hlr->ops);
+	free(hlr->ops);
+
+	cl_free(hlr->flying);
 
 	q_free(hlr->req_q);
 	q_free(hlr->retry_q);
 
 	dev_abs_free(hlr->dev);
+	free(hlr->dev);
 
 	io_destroy(hlr->aio_ctx);
 
@@ -128,13 +139,14 @@ void *request_handler(void *input) {
 
 		switch (req->type) {
 		case REQ_TYPE_SET:
-			rc = ops->get_kv(ops, req);
+			rc = ops->set_kv(ops, req);
 			break;	
 		case REQ_TYPE_GET:
-			rc = ops->set_kv(ops, req);
+			rc = ops->get_kv(ops, req);
 			if (rc) {
-				puts("Not existing key!");
-				abort();
+				//puts("Not existing key!");
+				printf("%lu\n", req->key.hash_low);
+				req->end_req(req);
 			}
 			break;
 		case REQ_TYPE_DELETE:

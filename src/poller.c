@@ -8,7 +8,7 @@
 // TODO: include spdk
 #endif
 
-#define NR_EVENTS QDEPTH
+#define NR_EVENTS QDEPTH*2
 
 extern bool stopflag_hlr;
 
@@ -38,6 +38,7 @@ static void *aio_poller(void *input) {
 					fprintf(stderr, "aio: I/O failed\n");
 				} else if (ev->res != iocb->u.c.nbytes) {
 					fprintf(stderr, "aio: Data size error\n");
+					abort();
 				}
 
 				cb->func(cb->arg);

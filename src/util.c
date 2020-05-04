@@ -9,6 +9,10 @@ uint64_t hashing_key(char *key, uint8_t len) {
 	return CityHash64(key, len);
 }
 
+uint128 hashing_key_128(char *key, uint8_t len) {
+	return CityHash128(key,len);
+}
+
 ssize_t read_sock(int sock, void *buf, ssize_t count) {
 	ssize_t readed = 0, len;
 	while (readed < count) {

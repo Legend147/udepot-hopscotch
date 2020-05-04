@@ -13,10 +13,12 @@
 #include <signal.h>
 
 #define IP "127.0.0.1"
-#define PORT 5555
+#define PORT 5556
 
 #define NR_KEY   50000000
 #define NR_QUERY 50000000
+//#define NR_KEY   2000000
+//#define NR_QUERY 2000000
 //#define NR_KEY   100000
 //#define NR_QUERY 100000
 #define KEY_LEN  16
@@ -125,6 +127,8 @@ static int load_kvpairs() {
 		}
 		memcpy(net_req.key, get_next_key_for_load(kg), KEY_LEN);
 		net_req.seq_num = ++seq_num_global;
+		//static int cnt = 0;
+		//printf("%d\n", ++cnt);
 		send_request(sock, &net_req);
 	}
 	wait_until_finish(&sem, CLIENT_QDEPTH);
@@ -186,6 +190,7 @@ int main(int argc, char *argv[]) {
 	run_bench(KEY_DIST_LOCALITY, 70, 30);
 	run_bench(KEY_DIST_LOCALITY, 80, 20);
 	run_bench(KEY_DIST_LOCALITY, 90, 10);
+	run_bench(KEY_DIST_LOCALITY, 99, 1);
 
 	bench_free();
 	return 0;

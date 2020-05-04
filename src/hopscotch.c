@@ -1,6 +1,7 @@
+#include "hopscotch.h"
 #include "type.h"
 #include "kv_ops.h"
-#include "hopscotch.h"
+#include "device.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -191,7 +192,7 @@ int hopscotch_set(struct kv_ops *ops, struct request *req) {
 	int offset = 0;
 	uint64_t pba;
 
-	hash_t h_key = req->key.hash;
+	hash_t h_key = req->key.hash_low;
 
 	uint32_t idx = h_key & ((1 << IDX_BIT)-1);
 	uint8_t  tag = (uint8_t)(h_key >> IDX_BIT);
@@ -269,7 +270,7 @@ int hopscotch_get(struct kv_ops *ops, struct request *req) {
 	struct handler *hlr = req->hlr;
 	int offset = 0;
 
-	hash_t h_key = req->key.hash;
+	hash_t h_key = req->key.hash_low;
 
 	uint32_t idx = h_key & ((1 << IDX_BIT)-1);
 	uint8_t  tag = (uint8_t)(h_key >> IDX_BIT);

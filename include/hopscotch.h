@@ -20,8 +20,6 @@
 #define NR_CACHED_PART (AVAIL_MEMORY/PAGESIZE)
 #define FLASH_READ_MAX 10
 
-#define TEMP_BUF_SIZE 16384
-
 struct hash_entry {
 	uint64_t neigh_off:5;
 	uint64_t key_fp_tag:8;
@@ -35,7 +33,6 @@ struct hash_table {
 
 struct hopscotch {
 	struct hash_table *table;
-	char *temp_buf;
 
 	uint64_t lookup_cost[FLASH_READ_MAX];
 };

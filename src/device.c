@@ -24,11 +24,9 @@ print_device_init(struct dev_abs *dev) {
 
 static void *
 alloc_seg_buffer(uint32_t size) {
-	int rc;
-	void *seg_buffer;
-	rc = posix_memalign(&seg_buffer, MEM_ALIGN_UNIT, size);
-	if (rc) {
-		perror("allocating seg_buffer");
+	void *seg_buffer = aligned_alloc(MEM_ALIGN_UNIT, size);
+	if (!seg_buffer) {
+		perror("Allocating seg_buffer");
 		abort();
 	}
 	return seg_buffer;
@@ -72,6 +70,7 @@ dev_abs_init(const char dev_name[]) {
 		seg->offset = seg->start_addr;
 	}
 	dev->staged_seg = &dev->seg_array[0];
+	dev->staged_seg->state = SEG_STATE_STAGED;
 	dev->staged_seg_idx = 0;
 	dev->staged_seg_buf = alloc_seg_buffer(dev->segment_size);
 
@@ -86,6 +85,7 @@ int
 dev_abs_free(struct dev_abs *dev) {
 	close(dev->dev_fd);
 	free(dev->seg_array);
+	free(dev->staged_seg_buf);
 	return 0;
 }
 

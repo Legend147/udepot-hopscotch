@@ -5,25 +5,27 @@
 #ifndef __DFHASH_CONFIG_H__
 #define __DFHASH_CONFIG_H__
 
-#define K (1024)
-#define M (1024*K)
-#define G (1024*M)
-#define T (1024*G)
+#define Ki (1024)
+#define Mi (1024*Ki)
+#define Gi (1024*Mi)
+#define Ti (1024*Gi)
 
 #define PAGESIZE 4096
 #define AVAIL_MEMORY (1 << 27)
 
-#define SEGMENT_SIZE 2*M
-#define GRAIN_UNIT 64
+#define SEGMENT_SIZE (2*Mi)
+#define GRAIN_UNIT 128
+#define NR_GRAIN_IN_SEG (SEGMENT_SIZE/GRAIN_UNIT)
 
 #define SOB GRAIN_UNIT
 
 #define KEY_LEN 16
 #define VALUE_LEN 1024
 
-#define VALUE_LEN_MAX VALUE_LEN
+#define VALUE_LEN_MAX (4*Ki)
 
-#define MEM_ALIGN_UNIT 4*K
+#define VALUE_ALIGN_UNIT VALUE_LEN
+#define MEM_ALIGN_UNIT (4*Ki)
 
 #define CDF_TABLE_MAX 100000
 

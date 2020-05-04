@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+#define PORT 5556
+
 int sv_sock, cl_sock;
 struct handler *hlr;
 
@@ -43,7 +45,7 @@ static int connect_client() {
 	memset(&sv_addr, 0, sizeof(sv_addr));
 	sv_addr.sin_family = AF_INET;
 	sv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	sv_addr.sin_port = htons(5555);
+	sv_addr.sin_port = htons(PORT);
 
 	if (bind(sv_sock, (struct sockaddr *)&sv_addr, sizeof(sv_addr)) == -1) {
 		abort();
@@ -85,7 +87,7 @@ int main() {
 	sig_add();
 
 	/* Server init */
-	server_init(HTABLE_HOPSCOTCH);
+	server_init(HTABLE_BIGKV);
 
 	/* Connect client */
 	connect_client();

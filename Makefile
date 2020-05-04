@@ -1,5 +1,3 @@
-TARGET=hopscotch
-
 SRC_DIR = ./src
 OBJ_DIR = ./obj
 LIB_DIR = ./lib
@@ -12,8 +10,8 @@ CFLAGS += \
 	-g \
 	-Wall \
 	-std=c++11 \
-	-fsanitize=address \
-#	-O2 \
+	-O2 \
+#	-fsanitize=address \
 
 LIBS += \
 	-lcityhash \
@@ -27,6 +25,8 @@ DEFS += \
 #	-DHOTSPOT \
 
 OBJ_SRC += \
+	$(SRC_DIR)/hopscotch.c \
+	$(SRC_DIR)/bigkv_index.c \
 	$(SRC_DIR)/util.c \
 	$(SRC_DIR)/keygen.c \
 	$(SRC_DIR)/queue.c \
@@ -47,19 +47,14 @@ client: $(SRC_DIR)/client.cc $(LIB_DIR)/libdfhash.a
 	@mkdir -p $(BIN_DIR)
 	$(CC) -o $(BIN_DIR)/$@ $^ $(CFLAGS) $(LIBS) $(DEFS) -I$(INC_DIR) 
 
-server: $(SRC_DIR)/server.cc $(OBJ_DIR)/$(TARGET).o $(LIB_DIR)/libdfhash.a
+server: $(SRC_DIR)/server.cc $(LIB_DIR)/libdfhash.a
 	@mkdir -p $(BIN_DIR)
 	$(CC) -o $(BIN_DIR)/$@ $^ $(CFLAGS) $(LIBS) $(DEFS) -I$(INC_DIR)
 
-$(OBJ_DIR)/$(TARGET).o: $(SRC_DIR)/$(TARGET).c
-	@mkdir -p $(OBJ_DIR)
-	$(CC) -c $^ $(CFLAGS) $(LIBS) $(DEFS) -I$(INC_DIR)
-	@mv *.o $(OBJ_DIR)/
-
 $(LIB_DIR)/libdfhash.a: $(TARGET_OBJ)
 	@mkdir -p $(LIB_DIR)
-	@mv $(SRC_DIR)/*.o $(LIB_DIR)
-	$(AR) r $@ $(LIB_DIR)/*
+	@mv $(SRC_DIR)/*.o $(OBJ_DIR)
+	$(AR) r $@ $(OBJ_DIR)/*
 
 .c.o:
 	$(CC) $(CFLAGS) $(LIBS) $(DEFS) -c $< -o $@ -I$(INC_DIR)

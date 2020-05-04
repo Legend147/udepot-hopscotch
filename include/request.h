@@ -9,7 +9,7 @@
 struct key_struct {
 	uint8_t len;
 	char *key;
-	hash_t hash;
+	hash_t hash_low, hash_high;
 };
 
 struct val_struct {
@@ -27,6 +27,7 @@ struct request {
 
 	void *(*end_req)(void *const);
 	void *params;
+	char *temp_buf;
 
 	struct handler *hlr;
 

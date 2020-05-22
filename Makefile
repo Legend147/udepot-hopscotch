@@ -4,16 +4,14 @@ LIB_DIR = ./lib
 BIN_DIR = ./bin
 INC_DIR = ./include
 
-USLAB_DIR = ~/Workspace/uslab
-
 CC = g++
 
 CFLAGS += \
 	-g \
 	-Wall \
 	-std=c++11 \
-	-O2 \
-#	-fsanitize=address \
+	-fsanitize=address \
+#	-O2 \
 
 LIBS += \
 	-lcityhash \
@@ -26,7 +24,6 @@ DEFS += \
 	-DUNIFORM \
 	-DBIGKV \
 	-DUSE_HUGEPAGE\
-#	-DUSE_SLAB_ALLOCATOR\
 #	-DHOTSPOT \
 
 OBJ_SRC += \
@@ -42,7 +39,6 @@ OBJ_SRC += \
 	$(SRC_DIR)/device.c \
 	$(SRC_DIR)/poller.c \
 	$(SRC_DIR)/aio.c \
-	$(SRC_DIR)/uslab.c \
 
 TARGET_OBJ =\
 		$(patsubst %.c,%.o,$(OBJ_SRC))\

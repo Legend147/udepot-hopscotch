@@ -77,7 +77,7 @@ void *net_end_req(void *_req) {
 	sw_end(&req->sw);
 	ack.seq_num = req->seq_num; // TODO
 	ack.type = req->type;
-	ack.elapsed_time = sw_get_usec(req->sw);
+	ack.elapsed_time = sw_get_usec(&req->sw);
 
 	sw_start(sw_send);
 	send_ack(req->cl_sock, &ack);

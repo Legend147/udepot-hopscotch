@@ -15,15 +15,17 @@
 #define IP "127.0.0.1"
 #define PORT 5556
 
-#define NR_KEY   50000000
-#define NR_QUERY 50000000
+//#define NR_KEY   100000000
+//#define NR_QUERY 100000000
+//#define NR_KEY   50000000
+//#define NR_QUERY 50000000
 //#define NR_KEY   2000000
 //#define NR_QUERY 2000000
-//#define NR_KEY   100000
-//#define NR_QUERY 100000
+#define NR_KEY   1000000
+#define NR_QUERY 1000000
 #define KEY_LEN  16
 
-#define CLIENT_QDEPTH 256
+#define CLIENT_QDEPTH 512
 
 bool stopflag;
 
@@ -62,19 +64,26 @@ static int sig_add() {
 
 void *ack_poller(void *arg) {
 	struct net_ack net_ack;
+	int len = 0;
 
 	puts("Bench :: ack_poller() created");
 
 	while (1) {
-		if (stopflag) return NULL;
+		if (stopflag) break;
 
-		recv_ack(sock, &net_ack);
+		len = recv_ack(sock, &net_ack);
+		if (len == -1) continue;
+		else if (len == 0) {
+			close(sock);
+			printf("Disconnected!\n");
+			break;
+		}
 		req_out(&sem);
-
 		if (net_ack.type == REQ_TYPE_GET) {
 			collect_latency(cdf_table, net_ack.elapsed_time);
 		}
 	}
+	return NULL;
 }
 
 static int bench_init() {
@@ -184,13 +193,13 @@ int main(int argc, char *argv[]) {
 	load_kvpairs();
 
 	/* Benchmark phase */
-	run_bench(KEY_DIST_UNIFORM, 50, 50);
-	run_bench(KEY_DIST_UNIFORM, 50, 50);
-	run_bench(KEY_DIST_LOCALITY, 60, 40);
-	run_bench(KEY_DIST_LOCALITY, 70, 30);
-	run_bench(KEY_DIST_LOCALITY, 80, 20);
-	run_bench(KEY_DIST_LOCALITY, 90, 10);
-	run_bench(KEY_DIST_LOCALITY, 99, 1);
+//	run_bench(KEY_DIST_UNIFORM, 50, 50);
+//	run_bench(KEY_DIST_UNIFORM, 50, 50);
+//	run_bench(KEY_DIST_LOCALITY, 60, 40);
+//	run_bench(KEY_DIST_LOCALITY, 70, 30);
+//	run_bench(KEY_DIST_LOCALITY, 80, 20);
+//	run_bench(KEY_DIST_LOCALITY, 90, 10);
+//	run_bench(KEY_DIST_LOCALITY, 99, 1);
 
 	bench_free();
 	return 0;

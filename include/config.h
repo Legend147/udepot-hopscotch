@@ -22,6 +22,7 @@
 #define KEY_LEN 16
 #define VALUE_LEN 1024
 
+#define KEY_LEN_MAX 256
 #define VALUE_LEN_MAX (4*Ki)
 
 #define VALUE_ALIGN_UNIT VALUE_LEN

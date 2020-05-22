@@ -1,8 +1,12 @@
 #include "bigkv_index.h"
 #include "device.h"
+#include "stopwatch.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+stopwatch *sw_set, *sw_lru, *sw_pba, *sw_cpy;
+time_t set_total, set_lru, set_pba, set_cpy;
 
 static void copy_key_to_value(struct key_struct *key, struct val_struct *value) {
 	memcpy(value->value, &key->len, sizeof(key->len));
@@ -38,6 +42,11 @@ int bigkv_index_init(struct kv_ops *ops) {
 	}
 
 	ops->_private = (void *)bi;
+
+	sw_set = sw_create();
+	sw_lru = sw_create();
+	sw_pba = sw_create();
+	sw_cpy = sw_create();
 	return rc;
 }
 
@@ -49,6 +58,14 @@ int bigkv_index_free(struct kv_ops *ops) {
 	free(bi->table);
 	free(bi);
 	ops->_private = NULL;
+	sw_destroy(sw_set);
+	sw_destroy(sw_lru);
+	sw_destroy(sw_cpy);
+	sw_destroy(sw_pba);
+	printf("set total: %lu\n", set_total);
+	printf("set lru: %lu\n", set_lru);
+	printf("set pba: %lu\n", set_pba);
+	printf("set cpy: %lu\n", set_cpy);
 	return rc;
 }
 
@@ -302,6 +319,7 @@ exit:
 
 
 int bigkv_index_set(struct kv_ops *ops, struct request *req) {
+	sw_start(sw_set);
 	int rc = 0;
 	struct handler *hlr = req->hlr;
 	struct bigkv_index *bi = (struct bigkv_index *)ops->_private;
@@ -343,20 +361,20 @@ bi_get_entry:
 		entry->dirty_bit = 1;
 		entry->lru_bit = 0;
 		entry->kv_size = req->value.len / GRAIN_UNIT;
+		sw_start(sw_pba);
 		entry->pba = get_next_pba(hlr, req->value.len);
+		sw_end(sw_pba);
+		set_pba += sw_get_usec(sw_pba);
 
+		sw_start(sw_lru);
 		for (int i = 0; i < NR_SET; i++) {
 			struct hash_entry *tmp = &bucket->entry[i];
 			if (entry != tmp && tmp->lru_bit < lru_origin) {
 				tmp->lru_bit++;
 			}
 		}
-		static int cnt = 0;
-		cnt++;
-//		printf("%d succesfully inserted\n", ++cnt);
-		if (cnt == 16378) {
-			puts("");
-		}
+		sw_end(sw_lru);
+		set_lru += sw_get_usec(sw_lru);
 		goto write_kvpair;
 	}
 
@@ -387,9 +405,14 @@ bi_write_ptable:
 write_kvpair:
 	cb = make_callback(req->end_req, req);
 	copy_key_to_value(&req->key, &req->value);
+	sw_start(sw_cpy);
 	hlr->write(hlr, entry->pba, entry->kv_size, req->value.value, cb);
+	sw_end(sw_cpy);
+	set_cpy += sw_get_usec(sw_cpy);
 
 exit:
+	sw_end(sw_set);
+	set_total += sw_get_usec(sw_set);
 	return rc;
 }
 

@@ -46,6 +46,11 @@ static void *aio_poller(void *input) {
 				free(ev->obj);
 			}
 		}
+
+		while ((cb = (struct callback *)q_dequeue(hlr->done_q))) {
+			cb->func(cb->arg);
+			free(cb);
+		}
 	}
 	return NULL;
 }

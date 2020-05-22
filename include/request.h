@@ -8,13 +8,15 @@
 
 struct key_struct {
 	uint8_t len;
-	char *key;
+	char key[KEY_LEN_MAX]; //__attribute__((aligned(64)));
+	//char *key;
 	hash_t hash_low, hash_high;
 };
 
 struct val_struct {
 	uint32_t len;
-	char *value;
+	char value[VALUE_LEN_MAX]; //__attribute__((aligned(64)));
+	//char *value;
 };
 
 struct request {
@@ -23,7 +25,7 @@ struct request {
 	struct key_struct key;
 	struct val_struct value;
 
-	stopwatch *sw;
+	stopwatch sw;
 
 	void *(*end_req)(void *const);
 	void *params;
@@ -32,9 +34,9 @@ struct request {
 	struct handler *hlr;
 
 	int cl_sock;
-};
+}; //__attribute__((aligned(64)));
 
-struct request *make_request_from_netreq(struct net_req *nr, int sock);
+struct request *make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock);
 void *net_end_req(void *_req);
 
 #endif

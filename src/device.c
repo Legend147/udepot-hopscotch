@@ -1,30 +1,46 @@
 #include "device.h"
 #include "config.h"
 #include "aio.h"
+#include "stopwatch.h"
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
+
+extern int errno;
+
+time_t t_devw, t_cb;
+stopwatch *sw_devw, *sw_cb;
+
+extern time_t t_send, t_free;
+extern stopwatch *sw_send, *sw_free;
 
 static void
 print_device_init(struct dev_abs *dev) {
-	printf("Device: %s\n", dev->dev_name);
-	printf("Logical Block Size: %u B\n", dev->logical_block_size);
-	printf("Logical Blocks: %u\n", dev->nr_logical_block);
-	printf("Total Size: %lu (%.2f GB, %.2fGiB)\n", dev->size_in_byte,
+	printf("dev_abs: %s is initialized\n", dev->dev_name);
+	printf("|-- Logical Block Size: %u B\n", dev->logical_block_size);
+	printf("|-- Logical Blocks: %u\n", dev->nr_logical_block);
+	printf("|-- Total Size: %lu (%.2f GB, %.2fGiB)\n", dev->size_in_byte,
 		(double)dev->size_in_byte/1000/1000/1000,
 		(double)dev->size_in_byte/1024/1024/1024);
-	printf("Segment Size: %lu B\n", dev->segment_size);
-	printf("Segments: %u\n", dev->nr_segment);
+	printf("|-- Segment Size: %lu B\n", dev->segment_size);
+	printf("`-- Segments: %u\n", dev->nr_segment);
 	puts("");
 }
 
 static void *
 alloc_seg_buffer(uint32_t size) {
+#ifdef USE_HUGEPAGE
+	void *seg_buffer = mmap(NULL, size, PROT_READ | PROT_WRITE,
+				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
+#else
 	void *seg_buffer = aligned_alloc(MEM_ALIGN_UNIT, size);
+#endif
 	if (!seg_buffer) {
 		perror("Allocating seg_buffer");
 		abort();
@@ -78,6 +94,11 @@ dev_abs_init(const char dev_name[]) {
 
 	print_device_init(dev);
 
+	sw_devw = sw_create();
+	sw_cb = sw_create();
+	sw_send = sw_create();
+	sw_free = sw_create();
+
 	return dev;
 }
 
@@ -85,7 +106,19 @@ int
 dev_abs_free(struct dev_abs *dev) {
 	close(dev->dev_fd);
 	free(dev->seg_array);
+#ifdef USE_HUGEPAGE
+	munmap(dev->staged_seg_buf, dev->segment_size);
+#else
 	free(dev->staged_seg_buf);
+#endif
+	printf("`t_devw: %lu\n", t_devw);
+	printf("`t_cb: %lu\n", t_cb);
+	printf("``t_send: %lu\n", t_send);
+	printf("``t_free: %lu\n", t_free);
+	sw_destroy(sw_devw);
+	sw_destroy(sw_cb);
+	sw_destroy(sw_send);
+	sw_destroy(sw_free);
 	return 0;
 }
 
@@ -136,17 +169,28 @@ dev_abs_write(struct handler *hlr, uint64_t pba, uint32_t size_in_grain,
 	uint32_t size = size_in_grain * dev->grain_unit;
 	uint64_t offset = (pba * dev->grain_unit) - ss->start_addr;
 
+	sw_start(sw_devw);
 	memcpy((char *)dev->staged_seg_buf + offset, buf, size);
+	sw_end(sw_devw);
+	t_devw += sw_get_usec(sw_devw);
 
+	q_enqueue((void *)cb, hlr->done_q);
+/*	sw_start(sw_cb);
 	cb->func(cb->arg);
-	free(cb);
+	sw_end(sw_cb);
+	t_cb += sw_get_usec(sw_cb);
+	free(cb); */
 	return 0;
 }
 
 static void *
 reap_seg_buf(void *arg) {
 	void *seg_buf = arg;
+#ifdef USE_HUGEPAGE
+	munmap(seg_buf, SEGMENT_SIZE);
+#else
 	free(seg_buf);
+#endif
 	return NULL;
 }
 

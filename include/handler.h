@@ -36,6 +36,10 @@ struct handler {
 
 	queue *req_q;
 	queue *retry_q;
+	queue *done_q;
+
+	queue *req_pool;
+	struct request *req_arr;
 
 #ifdef LINUX_AIO
 	io_context_t aio_ctx;
@@ -49,8 +53,9 @@ struct handler {
 		     struct callback *);
 };
 
+
 /* handler */
-struct handler *handler_init(htable_t ht_type);
+struct handler *handler_init(char dev_name[]);
 void handler_free(struct handler *hlr);
 
 int forward_req_to_hlr(struct handler *hlr, struct request *req);

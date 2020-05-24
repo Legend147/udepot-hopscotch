@@ -10,8 +10,8 @@ CFLAGS += \
 	-g \
 	-Wall \
 	-std=c++11 \
-	-fsanitize=address \
-#	-O2 \
+	-O2 \
+#	-fsanitize=address \
 
 LIBS += \
 	-lcityhash \
@@ -22,8 +22,10 @@ DEFS += \
 	-DCITYHASH \
 	-DLINUX_AIO \
 	-DUNIFORM \
-	-DBIGKV \
 	-DUSE_HUGEPAGE\
+	-DBIGKV \
+#	-DYCSB \
+#	-DHOPSCOTCH \
 #	-DHOTSPOT \
 
 OBJ_SRC += \
@@ -31,7 +33,6 @@ OBJ_SRC += \
 	$(SRC_DIR)/bigkv_index.c \
 	$(SRC_DIR)/util.c \
 	$(SRC_DIR)/keygen.c \
-	$(SRC_DIR)/queue.c \
 	$(SRC_DIR)/cond_lock.c \
 	$(SRC_DIR)/request.c \
 	$(SRC_DIR)/handler.c \
@@ -39,6 +40,8 @@ OBJ_SRC += \
 	$(SRC_DIR)/device.c \
 	$(SRC_DIR)/poller.c \
 	$(SRC_DIR)/aio.c \
+	$(SRC_DIR)/lfqueue.c \
+#	$(SRC_DIR)/queue.c \
 
 TARGET_OBJ =\
 		$(patsubst %.c,%.o,$(OBJ_SRC))\

@@ -16,6 +16,7 @@ enum seg_state_t:unsigned char {
 };
 
 enum req_type_t:unsigned char {
+	REQ_TYPE_PADDING,
 	REQ_TYPE_SET,
 	REQ_TYPE_GET,
 	REQ_TYPE_DELETE,

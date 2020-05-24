@@ -94,10 +94,10 @@ dev_abs_init(const char dev_name[]) {
 
 	print_device_init(dev);
 
-	sw_devw = sw_create();
+/*	sw_devw = sw_create();
 	sw_cb = sw_create();
 	sw_send = sw_create();
-	sw_free = sw_create();
+	sw_free = sw_create(); */
 
 	return dev;
 }
@@ -111,14 +111,14 @@ dev_abs_free(struct dev_abs *dev) {
 #else
 	free(dev->staged_seg_buf);
 #endif
-	printf("`t_devw: %lu\n", t_devw);
+/*	printf("`t_devw: %lu\n", t_devw);
 	printf("`t_cb: %lu\n", t_cb);
 	printf("``t_send: %lu\n", t_send);
 	printf("``t_free: %lu\n", t_free);
 	sw_destroy(sw_devw);
 	sw_destroy(sw_cb);
 	sw_destroy(sw_send);
-	sw_destroy(sw_free);
+	sw_destroy(sw_free); */
 	return 0;
 }
 
@@ -151,7 +151,7 @@ dev_abs_read(struct handler *hlr, uint64_t pba, uint32_t size_in_grain,
 		memcpy(buf, (char *)dev->staged_seg_buf + offset, size);
 
 		cb->func(cb->arg);
-		free(cb);
+		q_enqueue((void *)cb, hlr->cb_pool);//free(cb);
 		return 0;
 
 	} else {
@@ -169,17 +169,20 @@ dev_abs_write(struct handler *hlr, uint64_t pba, uint32_t size_in_grain,
 	uint32_t size = size_in_grain * dev->grain_unit;
 	uint64_t offset = (pba * dev->grain_unit) - ss->start_addr;
 
-	sw_start(sw_devw);
+	//sw_start(sw_devw);
 	memcpy((char *)dev->staged_seg_buf + offset, buf, size);
-	sw_end(sw_devw);
-	t_devw += sw_get_usec(sw_devw);
+	//sw_end(sw_devw);
+	//t_devw += sw_get_usec(sw_devw);
 
-	q_enqueue((void *)cb, hlr->done_q);
 /*	sw_start(sw_cb);
-	cb->func(cb->arg);
+	q_enqueue((void *)cb, hlr->done_q);
 	sw_end(sw_cb);
-	t_cb += sw_get_usec(sw_cb);
-	free(cb); */
+	t_cb += sw_get_usec(sw_cb); */
+	//sw_start(sw_cb);
+	cb->func(cb->arg);
+	//sw_end(sw_cb);
+	//t_cb += sw_get_usec(sw_cb);
+	q_enqueue((void *)cb, hlr->cb_pool); //free(cb);
 	return 0;
 }
 
@@ -215,7 +218,7 @@ uint64_t get_next_pba(struct handler *hlr, uint32_t size) {
 	if (ss->offset + size > ss->end_addr) {
 		ss->state = SEG_STATE_USED;
 
-		new_cb = make_callback(reap_seg_buf, dev->staged_seg_buf);
+		new_cb = make_callback(hlr, reap_seg_buf, dev->staged_seg_buf);
 		aio_write(hlr, ss->start_addr, dev->segment_size, 
 			  (char *)dev->staged_seg_buf, new_cb);
 

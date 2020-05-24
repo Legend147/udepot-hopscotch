@@ -228,7 +228,7 @@ hop_insert_key_mismatch:
 	if (offset != -1) {
 		// read kv-pair to confirm whether it is correct key or not
 		entry = &ht->entry[(idx+offset)%NR_ENTRY];
-		cb = make_callback(cb_keycmp, req);
+		cb = make_callback(hlr, cb_keycmp, req);
 		params->offset = offset;
 		hlr->read(hlr, entry->pba, entry->kv_size, req->value.value, cb);
 		goto exit;
@@ -248,7 +248,7 @@ hop_insert_key_match:
 
 	entry = fill_entry(&ht->entry[(idx+offset)%NR_ENTRY], offset, tag, req->value.len/SOB, pba);
 
-	cb = make_callback(req->end_req, req);
+	cb = make_callback(hlr, req->end_req, req);
 	copy_key_to_value(&req->key, &req->value);
 	hlr->write(hlr, entry->pba, entry->kv_size, req->value.value, cb);
 
@@ -302,7 +302,7 @@ hop_lookup_key_mismatch:
 	offset = find_matching_tag(ht, idx, offset, tag);
 	if (offset != -1) {
 		entry = &ht->entry[(idx+offset)%NR_ENTRY];
-		cb = make_callback(cb_keycmp, req);
+		cb = make_callback(hlr, cb_keycmp, req);
 		params->offset = offset;
 		hlr->read(hlr, entry->pba, entry->kv_size, req->value.value, cb);
 		goto exit;

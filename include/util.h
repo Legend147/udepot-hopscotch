@@ -16,16 +16,14 @@
 struct net_req {
 	req_type_t type;
 	uint8_t keylen;
+	uint32_t seq_num;
 	char key[KEY_LEN];
 	uint32_t kv_size;
-
-	uint32_t seq_num;
-};
+} __attribute__((packed));
 
 struct net_ack {
 	uint32_t seq_num;
 	req_type_t type;
-
 	time_t elapsed_time;
 };
 
@@ -38,6 +36,10 @@ ssize_t send_request(int sock, struct net_req *nr);
 ssize_t recv_request(int sock, struct net_req *nr);
 ssize_t send_ack(int sock, struct net_ack *na);
 ssize_t recv_ack(int sock, struct net_ack *na);
+
+#ifdef SEND_ACK_BUFFERING
+ssize_t ack_buf_flush(int sock);
+#endif
 
 void collect_latency(uint64_t table[], time_t latency);
 void print_cdf(uint64_t table[], uint64_t nr_query);

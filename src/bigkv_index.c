@@ -8,6 +8,9 @@
 stopwatch *sw_set, *sw_lru, *sw_pba, *sw_cpy;
 time_t set_total, set_lru, set_pba, set_cpy;
 
+stopwatch *sw_get;
+time_t t_get;
+
 static void copy_key_to_value(struct key_struct *key, struct val_struct *value) {
 	memcpy(value->value, &key->len, sizeof(key->len));
 	memcpy(value->value+sizeof(key->len), key->key, key->len);
@@ -44,9 +47,10 @@ int bigkv_index_init(struct kv_ops *ops) {
 	ops->_private = (void *)bi;
 
 	sw_set = sw_create();
-	sw_lru = sw_create();
+/*	sw_lru = sw_create();
 	sw_pba = sw_create();
 	sw_cpy = sw_create();
+	sw_get = sw_create(); */
 	return rc;
 }
 
@@ -58,14 +62,16 @@ int bigkv_index_free(struct kv_ops *ops) {
 	free(bi->table);
 	free(bi);
 	ops->_private = NULL;
+	printf("t_set: %lu\n", set_total);
 	sw_destroy(sw_set);
-	sw_destroy(sw_lru);
+/*	sw_destroy(sw_lru);
 	sw_destroy(sw_cpy);
 	sw_destroy(sw_pba);
 	printf("set total: %lu\n", set_total);
 	printf("set lru: %lu\n", set_lru);
 	printf("set pba: %lu\n", set_pba);
 	printf("set cpy: %lu\n", set_cpy);
+	printf("set get: %lu\n", t_get); */
 	return rc;
 }
 
@@ -220,6 +226,7 @@ static void *cb_part_table_write(void *arg) {
 }
 
 int bigkv_index_get(struct kv_ops *ops, struct request *req) {
+	//sw_start(sw_get);
 	int rc = 0, lru_origin;
 	struct handler *hlr = req->hlr;
 	struct bigkv_index *bi = (struct bigkv_index *)ops->_private;
@@ -247,7 +254,7 @@ int bigkv_index_get(struct kv_ops *ops, struct request *req) {
 	case BI_STEP_UPDATE_TABLE:
 		goto bi_update_table;
 	case BI_STEP_KEY_MISMATCH:
-		printf("wtf?\n");
+		//printf("wtf?\n");
 	default:
 		break;
 	}
@@ -265,7 +272,7 @@ int bigkv_index_get(struct kv_ops *ops, struct request *req) {
 	}
 
 	req->temp_buf = (char *)aligned_alloc(MEM_ALIGN_UNIT, PART_TABLE_SIZE);
-	cb = make_callback(cb_part_table_read, req);
+	cb = make_callback(hlr, cb_part_table_read, req);
 	hlr->read(hlr, part->pba, PART_TABLE_GRAINS, req->temp_buf, cb);
 	goto exit;
 
@@ -279,7 +286,7 @@ bi_update_table:
 	tmp_entry_f = *entry_f;
 	tmp_fp = req->key.hash_low;
 	req->temp_buf = NULL;
-	cb = make_callback(cb_keycmp, req);
+	cb = make_callback(hlr, cb_keycmp, req);
 	hlr->read(hlr, entry_f->pba, entry_f->kv_size, req->value.value, cb);
 
 get_target_retry:
@@ -303,17 +310,19 @@ get_target_retry:
 	} else {
 		char *ptable_buf = update_part_table(ptable, part_buckets);
 		ptable = NULL;
-		cb = make_callback(cb_part_table_write_for_get, ptable_buf);
+		cb = make_callback(hlr, cb_part_table_write_for_get, ptable_buf);
 		part->pba = get_next_pba(hlr, PART_TABLE_SIZE);
 		hlr->write(hlr, part->pba, PART_TABLE_GRAINS, ptable_buf, cb);
 		goto get_target_retry;
 	}
 
 read_kvpair:
-	cb = make_callback(cb_keycmp, req);
+	cb = make_callback(hlr, cb_keycmp, req);
 	hlr->read(hlr, entry->pba, entry->kv_size, req->value.value, cb);
 
 exit:
+	//sw_end(sw_get);
+	//t_get += sw_get_usec(sw_get);
 	return rc;
 }
 
@@ -361,27 +370,27 @@ bi_get_entry:
 		entry->dirty_bit = 1;
 		entry->lru_bit = 0;
 		entry->kv_size = req->value.len / GRAIN_UNIT;
-		sw_start(sw_pba);
+		//sw_start(sw_pba);
 		entry->pba = get_next_pba(hlr, req->value.len);
-		sw_end(sw_pba);
-		set_pba += sw_get_usec(sw_pba);
+		//sw_end(sw_pba);
+		//set_pba += sw_get_usec(sw_pba);
 
-		sw_start(sw_lru);
+		//sw_start(sw_lru);
 		for (int i = 0; i < NR_SET; i++) {
 			struct hash_entry *tmp = &bucket->entry[i];
 			if (entry != tmp && tmp->lru_bit < lru_origin) {
 				tmp->lru_bit++;
 			}
 		}
-		sw_end(sw_lru);
-		set_lru += sw_get_usec(sw_lru);
+		//sw_end(sw_lru);
+		//set_lru += sw_get_usec(sw_lru);
 		goto write_kvpair;
 	}
 
 	req->temp_buf = (char *)aligned_alloc(MEM_ALIGN_UNIT, PART_TABLE_SIZE);
 	if (part->pba != PBA_INVALID) {
 		part->flying = 1;
-		cb = make_callback(cb_part_table_read, req);
+		cb = make_callback(hlr, cb_part_table_read, req);
 		hlr->read(hlr, part->pba, PART_TABLE_GRAINS, req->temp_buf, cb);
 		goto exit;
 	} else {
@@ -397,18 +406,18 @@ bi_write_ptable:
 	part->flying = 0;
 	req->temp_buf = update_part_table(
 		(struct hash_part_table *)req->temp_buf, part_buckets);
-	cb = make_callback(cb_part_table_write, req);
+	cb = make_callback(hlr, cb_part_table_write, req);
 	part->pba = get_next_pba(hlr, PART_TABLE_SIZE);
 	hlr->write(hlr, part->pba, PART_TABLE_GRAINS, req->temp_buf, cb);
 	goto exit;
 
 write_kvpair:
-	cb = make_callback(req->end_req, req);
+	cb = make_callback(hlr, req->end_req, req);
 	copy_key_to_value(&req->key, &req->value);
-	sw_start(sw_cpy);
+	//sw_start(sw_cpy);
 	hlr->write(hlr, entry->pba, entry->kv_size, req->value.value, cb);
-	sw_end(sw_cpy);
-	set_cpy += sw_get_usec(sw_cpy);
+	//sw_end(sw_cpy);
+	//set_cpy += sw_get_usec(sw_cpy);
 
 exit:
 	sw_end(sw_set);

@@ -19,7 +19,7 @@
 
 #define SOB GRAIN_UNIT
 
-#define KEY_LEN 16
+#define KEY_LEN 32
 #define VALUE_LEN 1024
 
 #define KEY_LEN_MAX 256

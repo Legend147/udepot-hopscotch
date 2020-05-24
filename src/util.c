@@ -5,8 +5,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#define SEND_ACK_BUFFERING
-#define ACK_BUF_MAX 50
+//#define SEND_ACK_BUFFERING
+#define ACK_BUF_MAX 64
 
 uint64_t hashing_key(char *key, uint8_t len) {
 	return CityHash64(key, len);
@@ -43,22 +43,51 @@ ssize_t recv_request(int sock, struct net_req *nr) {
 }
 
 #ifdef SEND_ACK_BUFFERING
-struct net_ack ack_buf[ACK_BUF_MAX];
-int buf_cnt = 0;
+#ifdef YCSB
+__thread uint32_t ack_buf[ACK_BUF_MAX];
+#else
+__thread struct net_ack ack_buf[ACK_BUF_MAX];
+#endif
+__thread int buf_cnt = 0;
+#endif
+
+#ifdef SEND_ACK_BUFFERING
+ssize_t ack_buf_flush(int sock) {
+	ssize_t len = write(sock, ack_buf, sizeof(ack_buf[0]) * buf_cnt);
+	buf_cnt = 0;
+	return len;
+}
 #endif
 
 ssize_t send_ack(int sock, struct net_ack *na) {
+
 #ifdef SEND_ACK_BUFFERING
+	if (na->type == REQ_TYPE_GET) {
+#ifdef YCSB
+		return write(sock, &na->seq_num, sizeof(uint32_t));
+#else
+		return write(sock, na, sizeof(struct net_ack));
+#endif
+	}
+
+#ifdef YCSB
+	ack_buf[buf_cnt++] = na->seq_num;
+#else
 	ack_buf[buf_cnt++] = *na;
+#endif
 	if (buf_cnt == ACK_BUF_MAX) {
-		int len = write(sock, ack_buf, sizeof(struct net_ack) * buf_cnt);
-		buf_cnt = 0;
-		return len;
+		return ack_buf_flush(sock);
 	} else {
 		return 0;
 	}
 #else
+
+#ifdef YCSB
+	return write(sock, &na->seq_num, sizeof(uint32_t));
+#else
 	return write(sock, na, sizeof(struct net_ack));
+#endif
+
 #endif
 }
 

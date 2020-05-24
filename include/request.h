@@ -1,22 +1,21 @@
 #ifndef __REQUEST_H__
 #define __REQUEST_H__
 
+#include "config.h"
 #include "type.h"
 #include "handler.h"
 #include "stopwatch.h"
 #include "util.h"
 
 struct key_struct {
-	uint8_t len;
-	char key[KEY_LEN_MAX]; //__attribute__((aligned(64)));
-	//char *key;
-	hash_t hash_low, hash_high;
+	char		key[KEY_LEN_MAX];
+	uint8_t		len;
+	hash_t		hash_low, hash_high;
 };
 
 struct val_struct {
-	uint32_t len;
-	char value[VALUE_LEN_MAX]; //__attribute__((aligned(64)));
-	//char *value;
+	char		*value;
+	uint32_t	len;
 };
 
 struct request {
@@ -34,7 +33,7 @@ struct request {
 	struct handler *hlr;
 
 	int cl_sock;
-}; //__attribute__((aligned(64)));
+};
 
 struct request *make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock);
 void *net_end_req(void *_req);

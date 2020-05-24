@@ -23,7 +23,6 @@
 //#define NR_QUERY 2000000
 #define NR_KEY   1000000
 #define NR_QUERY 1000000
-#define KEY_LEN  16
 
 #define CLIENT_QDEPTH 512
 

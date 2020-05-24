@@ -11,20 +11,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-struct callback {
-	void *(*func)(void *);
-	void *arg;
-};
-
-static inline struct callback *
-make_callback(void *(*func)(void*), void *arg) {
-	struct callback *cb = 
-		(struct callback *)malloc(sizeof(struct callback));
-	cb->func = func;
-	cb->arg  = arg;
-	return cb;
-}
-
 struct handler {
 	int number;
 	pthread_t hlr_tid, plr_tid;
@@ -40,6 +26,10 @@ struct handler {
 
 	queue *req_pool;
 	struct request *req_arr;
+	queue *iocb_pool;
+	struct iocb *iocb_arr;
+	queue *cb_pool;
+	struct callback *cb_arr;
 
 #ifdef LINUX_AIO
 	io_context_t aio_ctx;
@@ -53,6 +43,25 @@ struct handler {
 		     struct callback *);
 };
 
+struct callback {
+	void *(*func)(void *);
+	void *arg;
+#ifdef LINUX_AIO
+	struct iocb *iocb;
+#endif
+};
+
+static inline struct callback *
+make_callback(struct handler *hlr, void *(*func)(void*), void *arg) {
+	//struct callback *cb = (struct callback *)malloc(sizeof(struct callback));
+	struct callback *cb = (struct callback *)q_dequeue(hlr->cb_pool);
+	cb->func = func;
+	cb->arg  = arg;
+#ifdef LINUX_AIO
+	cb->iocb = NULL;
+#endif
+	return cb;
+}
 
 /* handler */
 struct handler *handler_init(char dev_name[]);

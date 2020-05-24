@@ -148,13 +148,12 @@ static int accept_new_client(struct server *srv) {
 	}
 
 	printf("New client is connected!\n");
-	return 0;
+	return client_fd;
 }
 
 static int
-process_request(struct server *srv, struct epoll_event *event) {
+process_request(struct server *srv, int client_fd) {
 	int rc = 0;
-	int client_fd = event->data.fd;
 	int len = 0;
 
 	struct net_req n_req;
@@ -168,8 +167,10 @@ process_request(struct server *srv, struct epoll_event *event) {
 			close(client_fd);
 			epoll_ctl(srv->epfd, EPOLL_CTL_DEL, client_fd, NULL);
 			printf("Client is disconnected!\n");
+			rc = 1;
 			break;
 		} else {
+			n_req.kv_size = 1024;
 			int hlr_idx = (n_req.key[n_req.keylen-1] % srv->num_dev);
 			req = make_request_from_netreq(srv->hlr[hlr_idx], &n_req, client_fd);
 			rc = forward_req_to_hlr(srv->hlr[hlr_idx], req);
@@ -182,6 +183,7 @@ process_request(struct server *srv, struct epoll_event *event) {
 static int
 handle_request(struct server *srv) {
 	int rc = 0;
+	int client_fd = 0;
 
 	struct epoll_event epoll_events[MAX_EVENTS];
 	int event_count;
@@ -198,10 +200,17 @@ handle_request(struct server *srv) {
 
 		for (int i = 0; i < event_count; i++) {
 			if (epoll_events[i].data.fd == srv->fd) {
-				rc = accept_new_client(srv);
+				client_fd = accept_new_client(srv);
+				/* while (1) {
+					rc = process_request(srv, client_fd);
+					if (rc > 0) break;
+				} */
 			} else {
-				rc = process_request(srv, &epoll_events[i]);
-				if (rc) abort();
+				sw_start(sw_inf);
+				rc = process_request(srv, epoll_events[i].data.fd);
+				if (rc < 0) abort();
+				sw_end(sw_inf);
+				t_inf += sw_get_usec(sw_inf);
 			}
 		}
 	}

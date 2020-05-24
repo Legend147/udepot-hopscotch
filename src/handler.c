@@ -16,8 +16,6 @@
 int global_hlr_number;
 bool stopflag_hlr;
 
-__thread struct uslab_pt *uslab_pt;
-
 struct handler *handler_init(char dev_name[]) {
 	struct handler *hlr = (struct handler *)calloc(1, sizeof(struct handler));
 
@@ -45,12 +43,24 @@ struct handler *handler_init(char dev_name[]) {
 	q_init(&hlr->retry_q, QSIZE);
 	q_init(&hlr->done_q, QSIZE);
 	q_init(&hlr->req_pool, QSIZE);
+	q_init(&hlr->iocb_pool, QSIZE);
+	q_init(&hlr->cb_pool, QSIZE);
 
 	hlr->dev = dev_abs_init(dev_name);
 
 	hlr->req_arr = (struct request *)calloc(QSIZE, sizeof(struct request));
 	for (int i = 0; i < QSIZE; i++) {
 		q_enqueue((void *)&hlr->req_arr[i], hlr->req_pool);
+	}
+
+	hlr->iocb_arr = (struct iocb *)calloc(QSIZE, sizeof(struct iocb));
+	for (int i = 0; i < QSIZE; i++) {
+		q_enqueue((void *)&hlr->iocb_arr[i], hlr->iocb_pool);
+	}
+
+	hlr->cb_arr = (struct callback *)calloc(QSIZE, sizeof(struct callback));
+	for (int i = 0; i < QSIZE; i++) {
+		q_enqueue((void *)&hlr->cb_arr[i], hlr->cb_pool);
 	}
 
 	hlr->read = dev_abs_read;
@@ -98,6 +108,16 @@ void handler_free(struct handler *hlr) {
 
 	q_free(hlr->req_q);
 	q_free(hlr->retry_q);
+	q_free(hlr->done_q);
+
+	q_free(hlr->req_pool);
+	free(hlr->req_arr);
+
+	q_free(hlr->iocb_pool);
+	free(hlr->iocb_arr);
+
+	q_free(hlr->cb_pool);
+	free(hlr->cb_arr);
 
 	dev_abs_free(hlr->dev);
 	free(hlr->dev);
@@ -112,7 +132,7 @@ int forward_req_to_hlr(struct handler *hlr, struct request *req) {
 	cl_grap(hlr->flying);
 	req->hlr = hlr;
 	if (!q_enqueue((void *)req, hlr->req_q)) {
-		rc = 1;
+		rc = -1;
 	}
 	return rc;
 }
@@ -133,12 +153,17 @@ exit:
 	return (struct request *)req;
 }
 
+time_t t_tmp;
+stopwatch sw_tmp;
+
 void *request_handler(void *input) {
 	int rc = 0;
 
 	struct request *req = NULL;
 	struct handler *hlr = (struct handler *)input;
 	struct kv_ops *ops = hlr->ops;
+
+	struct callback *cb = NULL;
 
 	char thread_name[128] = {0};
 	sprintf(thread_name, "%s[%d]", "request_handler", hlr->number);
@@ -148,10 +173,20 @@ void *request_handler(void *input) {
 	       hlr->dev->dev_name);
 
 	while (1) {
-		if (stopflag_hlr && (hlr->flying->now==0)) return NULL;
+		if (stopflag_hlr && (hlr->flying->now==0)) { 
+			printf("t_tmp: %lu\n", t_tmp);
+			return NULL;
+		}
 
 		if (!(req=get_next_request(hlr))) {
 			continue;
+		}
+
+		sw_start(&sw_tmp);
+
+		while ((cb = (struct callback *)q_dequeue(hlr->done_q))) {
+			cb->func(cb->arg);
+			q_enqueue((void *)cb, hlr->cb_pool);
 		}
 
 		switch (req->type) {
@@ -161,7 +196,7 @@ void *request_handler(void *input) {
 		case REQ_TYPE_GET:
 			rc = ops->get_kv(ops, req);
 			if (rc) {
-				//puts("Not existing key!");
+				puts("Not existing key!");
 				printf("%lu\n", req->key.hash_low);
 				req->end_req(req);
 			}
@@ -173,6 +208,9 @@ void *request_handler(void *input) {
 			fprintf(stderr, "Wrong req type!\n");
 			return NULL;
 		}
+
+		sw_end(&sw_tmp);
+		t_tmp += sw_get_usec(&sw_tmp);
 	}
 	return NULL;
 }

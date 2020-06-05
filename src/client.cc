@@ -12,7 +12,8 @@
 #include <pthread.h>
 #include <signal.h>
 
-#define IP "127.0.0.1"
+//#define IP "127.0.0.1"
+#define IP "169.254.130.123"
 #define PORT 5556
 
 //#define NR_KEY   100000000
@@ -24,7 +25,7 @@
 #define NR_KEY   1000000
 #define NR_QUERY 1000000
 
-#define CLIENT_QDEPTH 512
+#define CLIENT_QDEPTH 256
 
 bool stopflag;
 
@@ -154,6 +155,7 @@ static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
 
 	net_req.keylen = KEY_LEN;
 	net_req.type = REQ_TYPE_GET;
+	net_req.kv_size = VALUE_LEN;
 
 	set_key_dist(kg, dist, query_ratio, hotset_ratio);
 

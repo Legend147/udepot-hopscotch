@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 
 #define MAX_EVENTS 1024
 
@@ -19,26 +20,66 @@
 
 int sv_sock, cl_sock;
 
-time_t t_inf, t_idle;
-stopwatch *sw_inf;
+stopwatch sw_inf, sw_sockread, sw_makereq, sw_forward, sw_queueing, sw_ack, sw_hashing;
+
+extern int num_syscalls;
+
+bool ack_sender_stop;
 
 struct server {
 	int fd, epfd;
 	int num_dev;
 	char device[32][16];
 	struct handler *hlr[32];
+	pthread_t tid_ack_sender;
+	int client_fd;
 } server;
+
+queue *ack_q;
 
 static void server_exit(int sig) {
 	puts("");
-	printf("t_inf: %lu\n", t_inf);
-	printf("t_idle: %lu\n", t_idle);
+	printf("\nt_inf:       %lu\n", sw_get_lap_sum(&sw_inf));
+	printf("`t_sockread: %lu\n", sw_get_lap_sum(&sw_sockread));
+	printf("`t_queueing: %lu\n", sw_get_lap_sum(&sw_queueing));
+	printf("``t_hashing:   %lu\n", sw_get_lap_sum(&sw_hashing));
+	printf("``t_makereq:   %lu\n", sw_get_lap_sum(&sw_makereq));
+	printf("``t_forward:   %lu\n", sw_get_lap_sum(&sw_forward));
+	printf("\nt_ack:       %lu\n", sw_get_lap_sum(&sw_ack));
 	for (int i = 0; i < server.num_dev; i++) {
 		handler_free(server.hlr[i]);
 	}
+
+	ack_sender_stop = true;
+	int *temp;
+	while (pthread_tryjoin_np(server.tid_ack_sender, (void **)&temp)) {}
+
 	close(cl_sock);
 	close(server.fd);
 	exit(1);
+}
+
+static void *ack_sender(void *input) {
+	struct server *srv = (struct server *)input;
+	q_init(&ack_q, QSIZE);
+
+	struct net_ack *ack;
+
+	while (1) {
+		if (ack_sender_stop) break;
+
+		ack = (struct net_ack *)q_dequeue(ack_q);
+		if (!ack) continue;
+		sw_start(&sw_ack);
+#ifdef YCSB
+		send_ack(srv->client_fd, ack);
+#else
+		send_ack(srv->client_fd, ack);
+#endif
+		free(ack);
+		sw_lap(&sw_ack);
+	}
+	return NULL;
 }
 
 static int sig_add() {
@@ -106,9 +147,21 @@ static int connection_init(struct server *srv) {
 }
 
 static int server_init(struct server *srv) {
-	connection_init(srv);
+	pthread_t tid = pthread_self();
 
-	sw_inf = sw_create();
+	cpu_set_t cpuset;
+	CPU_ZERO(&cpuset);
+	CPU_SET(0, &cpuset);
+	int s = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
+	if (s) abort();
+
+	pthread_create(&srv->tid_ack_sender, NULL, &ack_sender, (void *)srv);
+	CPU_ZERO(&cpuset);
+	CPU_SET(1, &cpuset);
+	s = pthread_setaffinity_np(tid, sizeof(cpu_set_t), &cpuset);
+	if (s) abort();
+
+	connection_init(srv);
 
 	for (int i = 0; i < srv->num_dev; i++) {
 		srv->hlr[i] = handler_init(srv->device[i]);
@@ -148,34 +201,63 @@ static int accept_new_client(struct server *srv) {
 	}
 
 	printf("New client is connected!\n");
+
+	// FIXME
+	srv->client_fd = client_fd;
+	// FIXME
+
 	return client_fd;
 }
+
+struct net_req n_req[QDEPTH];
 
 static int
 process_request(struct server *srv, int client_fd) {
 	int rc = 0;
 	int len = 0;
+	int n_obj = 0;
 
-	struct net_req n_req;
+	hash_t hash_high = 0;
+	int hlr_idx = 0;
+
 	struct request *req;
 
-	while (1) {
-		len = read_sock(client_fd, &n_req, sizeof(struct net_req));
-		if (len == -1) {
-			break;
-		} else if (len == 0) {
-			close(client_fd);
-			epoll_ctl(srv->epfd, EPOLL_CTL_DEL, client_fd, NULL);
-			printf("Client is disconnected!\n");
-			rc = 1;
-			break;
-		} else {
-			n_req.kv_size = 1024;
-			int hlr_idx = (n_req.key[n_req.keylen-1] % srv->num_dev);
-			req = make_request_from_netreq(srv->hlr[hlr_idx], &n_req, client_fd);
+	sw_start(&sw_sockread);
+	len = read_sock_bulk(client_fd, n_req, QDEPTH, sizeof(struct net_req));
+	sw_lap(&sw_sockread);
+
+	n_obj = len / sizeof(struct net_req);
+
+	if (len == -1) {
+		return rc;
+	} else if (len == 0) {
+		close(client_fd);
+		epoll_ctl(srv->epfd, EPOLL_CTL_DEL, client_fd, NULL);
+		printf("Client is disconnected!\n");
+		rc = 1;
+		return rc;
+	} else {
+		sw_start(&sw_queueing);
+		for (int i = 0; i < n_obj; i++) {
+#ifdef YCSB
+			n_req[i].kv_size = 1024;
+#endif
+			sw_start(&sw_hashing);
+			hash_high = hashing_key_128(n_req[i].key, n_req[i].keylen).first;
+			hlr_idx = (hash_high >> 32) % srv->num_dev;
+			sw_lap(&sw_hashing);
+
+			sw_start(&sw_makereq);
+			req = make_request_from_netreq(srv->hlr[hlr_idx],
+						       &n_req[i], client_fd);
+			sw_lap(&sw_makereq);
+
+			sw_start(&sw_forward);
 			rc = forward_req_to_hlr(srv->hlr[hlr_idx], req);
+			sw_lap(&sw_forward);
 			if (rc) return rc;
 		}
+		sw_lap(&sw_queueing);
 	}
 	return rc;
 }
@@ -183,7 +265,6 @@ process_request(struct server *srv, int client_fd) {
 static int
 handle_request(struct server *srv) {
 	int rc = 0;
-	int client_fd = 0;
 
 	struct epoll_event epoll_events[MAX_EVENTS];
 	int event_count;
@@ -200,17 +281,12 @@ handle_request(struct server *srv) {
 
 		for (int i = 0; i < event_count; i++) {
 			if (epoll_events[i].data.fd == srv->fd) {
-				client_fd = accept_new_client(srv);
-				/* while (1) {
-					rc = process_request(srv, client_fd);
-					if (rc > 0) break;
-				} */
+				accept_new_client(srv);
 			} else {
-				sw_start(sw_inf);
+				sw_start(&sw_inf);
 				rc = process_request(srv, epoll_events[i].data.fd);
 				if (rc < 0) abort();
-				sw_end(sw_inf);
-				t_inf += sw_get_usec(sw_inf);
+				sw_lap(&sw_inf);
 			}
 		}
 	}

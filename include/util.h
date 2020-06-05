@@ -31,6 +31,7 @@ uint64_t hashing_key(char *key, uint8_t len);
 uint128 hashing_key_128(char *key, uint8_t len);
 
 ssize_t read_sock(int sock, void *buf, ssize_t count);
+ssize_t read_sock_bulk(int sock, void *buf, ssize_t count, ssize_t align);
 
 ssize_t send_request(int sock, struct net_req *nr);
 ssize_t recv_request(int sock, struct net_req *nr);

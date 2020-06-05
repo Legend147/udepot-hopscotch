@@ -40,8 +40,8 @@ OBJ_SRC += \
 	$(SRC_DIR)/device.c \
 	$(SRC_DIR)/poller.c \
 	$(SRC_DIR)/aio.c \
+	$(SRC_DIR)/queue.c \
 	$(SRC_DIR)/lfqueue.c \
-#	$(SRC_DIR)/queue.c \
 
 TARGET_OBJ =\
 		$(patsubst %.c,%.o,$(OBJ_SRC))\

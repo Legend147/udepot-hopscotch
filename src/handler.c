@@ -16,6 +16,9 @@
 int global_hlr_number;
 bool stopflag_hlr;
 
+stopwatch sw_handler;
+time_t t_handler;
+
 struct handler *handler_init(char dev_name[]) {
 	struct handler *hlr = (struct handler *)calloc(1, sizeof(struct handler));
 
@@ -79,12 +82,12 @@ struct handler *handler_init(char dev_name[]) {
 	pthread_create(&hlr->hlr_tid, NULL, &request_handler, hlr);
 	cpu_set_t cpuset;
 	CPU_ZERO(&cpuset);
-	CPU_SET(hlr->number*2, &cpuset);
+	CPU_SET(2+hlr->number*2, &cpuset);
 	pthread_setaffinity_np(hlr->hlr_tid, sizeof(cpu_set_t), &cpuset);
 
 	pthread_create(&hlr->plr_tid, NULL, &device_poller, hlr);
 	CPU_ZERO(&cpuset);
-	CPU_SET(hlr->number*2+1, &cpuset);
+	CPU_SET(2+hlr->number*2+1, &cpuset);
 	pthread_setaffinity_np(hlr->plr_tid, sizeof(cpu_set_t), &cpuset);
 
 	return hlr;
@@ -99,6 +102,8 @@ void handler_free(struct handler *hlr) {
 	while (pthread_tryjoin_np(hlr->plr_tid, (void **)&temp)) {
 		//cl_release(hlr->cond);
 	}
+
+	printf("t_handler:  %lu\n", t_handler);
 
 	print_kv_ops_stat(&hlr->ops->stat);
 	hlr->ops->free(hlr->ops);
@@ -146,15 +151,18 @@ int retry_req_to_hlr(struct handler *hlr, struct request *req) {
 }
 
 struct request *get_next_request(struct handler *hlr) {
-	void *req = NULL;
-	if ((req = q_dequeue(hlr->retry_q))) goto exit;
-	else if ((req = q_dequeue(hlr->req_q))) goto exit;
+	struct request *req = NULL;
+	if ((req = (struct request *)q_dequeue(hlr->retry_q))) goto exit;
+	else if ((req = (struct request *)q_dequeue(hlr->req_q))) {
+		if (req->value.value == NULL) {
+			add_request_info(req);
+		}
+		goto exit;
+	}
 exit:
-	return (struct request *)req;
+	return req;
 }
 
-time_t t_tmp;
-stopwatch sw_tmp;
 
 void *request_handler(void *input) {
 	int rc = 0;
@@ -174,7 +182,6 @@ void *request_handler(void *input) {
 
 	while (1) {
 		if (stopflag_hlr && (hlr->flying->now==0)) { 
-			printf("t_tmp: %lu\n", t_tmp);
 			return NULL;
 		}
 
@@ -182,8 +189,7 @@ void *request_handler(void *input) {
 			continue;
 		}
 
-		sw_start(&sw_tmp);
-
+		sw_start(&sw_handler);
 		while ((cb = (struct callback *)q_dequeue(hlr->done_q))) {
 			cb->func(cb->arg);
 			q_enqueue((void *)cb, hlr->cb_pool);
@@ -208,9 +214,8 @@ void *request_handler(void *input) {
 			fprintf(stderr, "Wrong req type!\n");
 			return NULL;
 		}
-
-		sw_end(&sw_tmp);
-		t_tmp += sw_get_usec(&sw_tmp);
+		sw_end(&sw_handler);
+		t_handler += sw_get_usec(&sw_handler);
 	}
 	return NULL;
 }

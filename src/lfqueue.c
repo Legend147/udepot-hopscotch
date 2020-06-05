@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include "lfqueue.h"
 
-void q_init(struct queue** q, int size){
+void lfq_init(struct queue** q, int size){
 	(*q)=(queue*)malloc(sizeof(queue));
 	(*q)->head=(node*)malloc(sizeof(node));
 	(*q)->tail=(*q)->head;
@@ -14,7 +14,7 @@ void q_init(struct queue** q, int size){
 	(*q)->m_size=size;
 }
 
-int q_enqueue(void *val,struct queue* q){
+int lfq_enqueue(void *val,struct queue* q){
 	struct node *n;
 	struct node *_node=(node*)malloc(sizeof(node));
 	_node->n=val;
@@ -37,7 +37,7 @@ int q_enqueue(void *val,struct queue* q){
 	return 1;
 }
 
-void *q_dequeue(struct queue *q){
+void *lfq_dequeue(struct queue *q){
 	struct node* n;
 	void *val;
 	while(1){
@@ -56,7 +56,7 @@ void *q_dequeue(struct queue *q){
 	return val;
 }
 
-void q_free(struct queue *q){
-	while(q_dequeue(q)){}
+void lfq_free(struct queue *q){
+	while(lfq_dequeue(q)){}
 	free(q);
 }

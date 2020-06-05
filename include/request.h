@@ -36,6 +36,7 @@ struct request {
 };
 
 struct request *make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock);
+void add_request_info(struct request *req);
 void *net_end_req(void *_req);
 
 #endif

@@ -41,11 +41,11 @@ static void *aio_poller(void *input) {
 					abort();
 				}
 
-				q_enqueue((void *)cb, hlr->done_q);
-				//cb->func(cb->arg);
+				//q_enqueue((void *)cb, hlr->done_q);
+				cb->func(cb->arg);
 				//free(ev->data);
 				q_enqueue((void *)iocb, hlr->iocb_pool);
-				//q_enqueue((void *)cb, hlr->cb_pool);
+				q_enqueue((void *)cb, hlr->cb_pool);
 			}
 		}
 

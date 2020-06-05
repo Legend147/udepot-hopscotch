@@ -5,6 +5,11 @@
 stopwatch *sw_send, *sw_free;
 time_t t_send, t_free;
 
+stopwatch sw_value;
+time_t t_value;
+
+extern queue *ack_q;
+
 static int set_value(struct val_struct *value, int len, char *input_val) {
 	int rc = 0;
 
@@ -37,6 +42,20 @@ make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock) {
 	req->key.len = nr->keylen;
 	memcpy(req->key.key, nr->key, req->key.len);
 
+	req->value.len = nr->kv_size;
+	req->value.value = NULL;
+
+	req->hlr = hlr;
+
+	req->cl_sock = sock;
+
+	sw_start(&req->sw);
+
+	return req;
+}
+
+void
+add_request_info(struct request *req) {
 	uint128 hash128 = hashing_key_128(req->key.key, req->key.len);
 	req->key.hash_low = hash128.first;
 	req->key.hash_high = hash128.second;
@@ -46,7 +65,7 @@ make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock) {
 		set_value(&req->value, VALUE_LEN_MAX, NULL);
 		break;
 	case REQ_TYPE_SET:
-		set_value(&req->value, nr->kv_size, NULL);
+		set_value(&req->value, req->value.len, NULL);
 		break;
 	case REQ_TYPE_DELETE:
 	case REQ_TYPE_RANGE:
@@ -55,35 +74,23 @@ make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock) {
 		break;
 	}
 
-	sw_start(&req->sw);
-
 	req->end_req = net_end_req;
 	req->params = NULL;
 	req->temp_buf = NULL;
-
-	req->hlr = NULL;
-
-	req->cl_sock = sock;
-
-	return req;
 }
 
 void *net_end_req(void *_req) {
 	struct request *req = (struct request *)_req;
 	struct handler *hlr = req->hlr;
-	struct net_ack ack;
-
-	req_type_t rtype = req->type;
+	struct net_ack *ack = (struct net_ack *)malloc(sizeof(struct net_ack));
 
 	sw_end(&req->sw);
-	ack.seq_num = req->seq_num; // TODO
-	ack.type = req->type;
-	ack.elapsed_time = sw_get_usec(&req->sw);
+	ack->seq_num = req->seq_num; // TODO
+	ack->type = req->type;
+	ack->elapsed_time = sw_get_usec(&req->sw);
 
-	//sw_start(sw_send);
-	send_ack(req->cl_sock, &ack);
-	//sw_end(sw_send);
-	//t_send += sw_get_usec(sw_send);
+	//send_ack(req->cl_sock, &ack);
+	q_enqueue((void *)ack, ack_q);
 
 	cl_release(hlr->flying);
 

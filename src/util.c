@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 
-//#define SEND_ACK_BUFFERING
+#define SEND_ACK_BUFFERING
 #define ACK_BUF_MAX 64
 
 uint64_t hashing_key(char *key, uint8_t len) {
@@ -33,6 +33,30 @@ ssize_t read_sock(int sock, void *buf, ssize_t count) {
 	}
 	return readed;
 }
+
+int num_syscalls;
+
+ssize_t read_sock_bulk(int sock, void *buf, ssize_t max_objs, ssize_t align) {
+	ssize_t readed = 0, len;
+	ssize_t max_count = align * max_objs;
+	while (readed < max_count) {
+		len = read(sock, &(((char *)buf)[readed]), max_count-readed);
+		if (len == -1) {
+			if (readed == 0) return -1;
+			else continue;
+		} else if (len == 0) {
+			if (readed > 0) {
+				fprintf(stderr, "sock buf remain!\n");
+			}
+			return 0;
+		}
+		readed += len;
+
+		if (readed % align == 0) break;
+	}
+	return readed;
+}
+
 
 ssize_t send_request(int sock, struct net_req *nr) {
 	return write(sock, nr, sizeof(struct net_req));

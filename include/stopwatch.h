@@ -7,6 +7,7 @@
 
 typedef struct {
 	struct timeval start, end;
+	time_t lap_sum;
 } stopwatch;
 
 static inline stopwatch *sw_create() {
@@ -43,10 +44,6 @@ static inline time_t sw_get_usec(stopwatch *sw) {
 	time_t usec = (sw->end.tv_sec - sw->start.tv_sec) * 1000000;
 	usec += sw->end.tv_usec - sw->start.tv_usec;
 
-	if (usec > 1000000) {
-		fprintf(stderr, "Stopwatch: usec overflow!");
-		return -1;
-	}
 	return usec;
 }
 
@@ -58,6 +55,16 @@ static inline double sw_get_sec(stopwatch *sw) {
 	ret += (double)usec/1000000;
 
 	return ret;
+}
+
+static inline int sw_lap(stopwatch *sw) {
+	sw_end(sw);
+	sw->lap_sum += sw_get_usec(sw);
+	return 0;
+}
+
+static inline time_t sw_get_lap_sum(stopwatch *sw) {
+	return sw->lap_sum;
 }
 
 #endif

@@ -7,14 +7,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 #include <semaphore.h>
+#include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
-
-//#define IP "127.0.0.1"
-#define IP "169.254.130.123"
-#define PORT 5556
 
 //#define NR_KEY   100000000
 //#define NR_QUERY 100000000
@@ -25,19 +21,20 @@
 #define NR_KEY   1000000
 #define NR_QUERY 1000000
 
-#define CLIENT_QDEPTH 256
+#define CLIENT_QDEPTH 1024
 
 bool stopflag;
 
 struct keygen *kg;
 int sock;
-sem_t sem;
 pthread_t tid;
 uint32_t seq_num_global;
 
 uint64_t cdf_table[CDF_TABLE_MAX];
 
 stopwatch *sw;
+sem_t sem;
+
 
 static int bench_free() {
 	sleep(5);
@@ -63,7 +60,7 @@ static int sig_add() {
 }
 
 void *ack_poller(void *arg) {
-	struct net_ack net_ack;
+	struct netack na_arr[128];
 	int len = 0;
 
 	puts("Bench :: ack_poller() created");
@@ -71,16 +68,21 @@ void *ack_poller(void *arg) {
 	while (1) {
 		if (stopflag) break;
 
-		len = recv_ack(sock, &net_ack);
+		len = read_sock_bulk(sock, na_arr, 128, sizeof(struct netack));
 		if (len == -1) continue;
 		else if (len == 0) {
 			close(sock);
-			printf("Disconnected!\n");
+			printf("ack_poller:: Disconnected!\n");
 			break;
 		}
-		req_out(&sem);
-		if (net_ack.type == REQ_TYPE_GET) {
-			collect_latency(cdf_table, net_ack.elapsed_time);
+
+		int n_obj = len / sizeof(struct netack);
+		for (int i = 0; i < n_obj; i++) {
+			struct netack *na = &na_arr[i];
+			if (na->type == REQ_TYPE_GET) {
+				collect_latency(cdf_table, na->elapsed_time);
+			}
+			req_out(&sem);
 		}
 	}
 	return NULL;
@@ -119,26 +121,34 @@ static int connect_server() {
 	return 0;
 }
 
-static int load_kvpairs() {
-	struct net_req net_req;
+struct netreq nr_arr[128];
 
-	net_req.keylen = KEY_LEN;
-	net_req.type = REQ_TYPE_SET;
-	net_req.kv_size = VALUE_LEN;
+static int load_kvpairs() {
+	for (int i = 0; i < 128; i++) {
+		nr_arr[i].keylen  = KEY_LEN;
+		nr_arr[i].type    = REQ_TYPE_SET;
+		nr_arr[i].kv_size = VALUE_LEN;
+	}
 
 	sw_start(sw);
-	for (size_t i = 0; i < NR_KEY; i++) {
-		req_in(&sem);
+	for (size_t i = 0; i < NR_KEY;) {
 		if (i%(NR_KEY/100)==0) {
-			printf("\rProgress [%3.0f%%] (%lu/%d)",
+			printf("\rProgress [%2.0f%%] (%lu/%d)",
 				(float)i/NR_KEY*100, i, NR_KEY);
 			fflush(stdout);
 		}
-		memcpy(net_req.key, get_next_key_for_load(kg), KEY_LEN);
-		net_req.seq_num = ++seq_num_global;
-		//static int cnt = 0;
-		//printf("%d\n", ++cnt);
-		send_request(sock, &net_req);
+
+		int j;
+		for (j = 0; j < 128; i++, j++) {
+			kg_key_t next_key = get_next_key_for_load(kg);
+			if (next_key == NULL) {
+				break;
+			}
+			req_in(&sem);
+			memcpy(nr_arr[j].key, next_key, KEY_LEN);
+			nr_arr[j].seq_num = ++seq_num_global;
+		}
+		send_request_bulk(sock, nr_arr,j);
 	}
 	wait_until_finish(&sem, CLIENT_QDEPTH);
 	sw_end(sw);
@@ -151,25 +161,25 @@ static int load_kvpairs() {
 }
 
 static int run_bench(key_dist_t dist, int query_ratio, int hotset_ratio) {
-	struct net_req net_req;
+	struct netreq netreq;
 
-	net_req.keylen = KEY_LEN;
-	net_req.type = REQ_TYPE_GET;
-	net_req.kv_size = VALUE_LEN;
+	netreq.keylen = KEY_LEN;
+	netreq.type = REQ_TYPE_GET;
+	netreq.kv_size = VALUE_LEN;
 
 	set_key_dist(kg, dist, query_ratio, hotset_ratio);
 
 	sw_start(sw);
 	for (size_t i = 0; i < NR_QUERY; i++) {
-		req_in(&sem);
 		if (i%(NR_QUERY/100)==0) {
 			printf("\rProgress [%3.0f%%] (%lu/%d)",
 				(float)i/NR_QUERY*100,i,NR_QUERY);
 			fflush(stdout);
 		}
-		memcpy(net_req.key, get_next_key(kg), KEY_LEN);
-		net_req.seq_num = ++seq_num_global;
-		send_request(sock, &net_req);
+		req_in(&sem);
+		memcpy(netreq.key, get_next_key(kg), KEY_LEN);
+		netreq.seq_num = ++seq_num_global;
+		send_request(sock, &netreq);
 	}
 	wait_until_finish(&sem, CLIENT_QDEPTH);
 	sw_end(sw);
@@ -199,7 +209,7 @@ int main(int argc, char *argv[]) {
 //	run_bench(KEY_DIST_LOCALITY, 60, 40);
 //	run_bench(KEY_DIST_LOCALITY, 70, 30);
 //	run_bench(KEY_DIST_LOCALITY, 80, 20);
-//	run_bench(KEY_DIST_LOCALITY, 90, 10);
+//	run_bench(KEY_DIST_LOCALITY, 90, 10); 
 //	run_bench(KEY_DIST_LOCALITY, 99, 1);
 
 	bench_free();

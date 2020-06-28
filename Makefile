@@ -34,6 +34,7 @@ OBJ_SRC += \
 	$(SRC_DIR)/util.c \
 	$(SRC_DIR)/keygen.c \
 	$(SRC_DIR)/cond_lock.c \
+	$(SRC_DIR)/master.c \
 	$(SRC_DIR)/request.c \
 	$(SRC_DIR)/handler.c \
 	$(SRC_DIR)/request.c \
@@ -52,7 +53,7 @@ client: $(SRC_DIR)/client.cc $(LIB_DIR)/libdfhash.a
 	@mkdir -p $(BIN_DIR)
 	$(CC) -o $(BIN_DIR)/$@ $^ $(CFLAGS) $(LIBS) $(DEFS) -I$(INC_DIR) 
 
-server: $(SRC_DIR)/server.cc $(LIB_DIR)/libdfhash.a
+server: $(SRC_DIR)/temp.cc $(LIB_DIR)/libdfhash.a
 	@mkdir -p $(BIN_DIR)
 	$(CC) -o $(BIN_DIR)/$@ $^ $(CFLAGS) $(LIBS) $(DEFS) -I$(INC_DIR)
 

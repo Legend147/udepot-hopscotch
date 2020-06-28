@@ -6,6 +6,7 @@
 #include "handler.h"
 #include "stopwatch.h"
 #include "util.h"
+#include "master.h"
 
 struct key_struct {
 	char		key[KEY_LEN_MAX];
@@ -35,7 +36,7 @@ struct request {
 	int cl_sock;
 };
 
-struct request *make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock);
+struct request *make_request_from_netreq(struct handler *hlr, struct netreq *nr, int sock);
 void add_request_info(struct request *req);
 void *net_end_req(void *_req);
 

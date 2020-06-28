@@ -14,12 +14,6 @@
 
 extern int errno;
 
-time_t t_devw, t_cb;
-stopwatch *sw_devw, *sw_cb;
-
-extern time_t t_send, t_free;
-extern stopwatch *sw_send, *sw_free;
-
 static void
 print_device_init(struct dev_abs *dev) {
 	printf("dev_abs: %s is initialized\n", dev->dev_name);
@@ -94,11 +88,6 @@ dev_abs_init(const char dev_name[]) {
 
 	print_device_init(dev);
 
-/*	sw_devw = sw_create();
-	sw_cb = sw_create();
-	sw_send = sw_create();
-	sw_free = sw_create(); */
-
 	return dev;
 }
 
@@ -111,14 +100,6 @@ dev_abs_free(struct dev_abs *dev) {
 #else
 	free(dev->staged_seg_buf);
 #endif
-/*	printf("`t_devw: %lu\n", t_devw);
-	printf("`t_cb: %lu\n", t_cb);
-	printf("``t_send: %lu\n", t_send);
-	printf("``t_free: %lu\n", t_free);
-	sw_destroy(sw_devw);
-	sw_destroy(sw_cb);
-	sw_destroy(sw_send);
-	sw_destroy(sw_free); */
 	return 0;
 }
 
@@ -151,7 +132,7 @@ dev_abs_read(struct handler *hlr, uint64_t pba, uint32_t size_in_grain,
 		memcpy(buf, (char *)dev->staged_seg_buf + offset, size);
 
 		cb->func(cb->arg);
-		q_enqueue((void *)cb, hlr->cb_pool);//free(cb);
+		q_enqueue((void *)cb, hlr->cb_pool);
 		return 0;
 
 	} else {
@@ -169,20 +150,10 @@ dev_abs_write(struct handler *hlr, uint64_t pba, uint32_t size_in_grain,
 	uint32_t size = size_in_grain * dev->grain_unit;
 	uint64_t offset = (pba * dev->grain_unit) - ss->start_addr;
 
-	//sw_start(sw_devw);
 	memcpy((char *)dev->staged_seg_buf + offset, buf, size);
-	//sw_end(sw_devw);
-	//t_devw += sw_get_usec(sw_devw);
 
-/*	sw_start(sw_cb);
-	q_enqueue((void *)cb, hlr->done_q);
-	sw_end(sw_cb);
-	t_cb += sw_get_usec(sw_cb); */
-	//sw_start(sw_cb);
 	cb->func(cb->arg);
-	//sw_end(sw_cb);
-	//t_cb += sw_get_usec(sw_cb);
-	q_enqueue((void *)cb, hlr->cb_pool); //free(cb);
+	q_enqueue((void *)cb, hlr->cb_pool);
 	return 0;
 }
 
@@ -236,26 +207,3 @@ uint64_t get_next_pba(struct handler *hlr, uint32_t size) {
 	return pba;
 }
 
-/*
-void *get_next_segment(struct dev_abs *dev) {
-	struct segment *old_seg, *new_seg;
-	old_seg = &dev->seg_array[dev->staged_seg_idx];
-	old_seg->state = SEG_STATE_USED;
-
-#if (DESTAGING == RR_EVICTION)
-	dev->staged_seg_idx = (dev->staged_seg_idx+1) % dev->nr_segment;
-	new_seg = &dev->seg_array[dev->staged_seg_idx];
-	
-	if (new_seg->state == SEG_STATE_USED) {
-		// TODO: discard old kv-pairs
-	}
-	new_seg->state = SEG_STATE_STAGED;
-	new_seg->offset = (uint64_t)dev->staged_seg_idx * dev->segment_size;
-
-	dev->staged_seg_buffer = alloc_seg_buffer(dev->segment_size);
-#elif (DESTAGING == RR_CHERRYPICK)
-	// TODO: implement Round-robin + Cherry-pick
-#endif
-	return dev->staged_seg_buffer;
-}
-*/

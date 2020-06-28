@@ -32,7 +32,7 @@ static int set_value(struct val_struct *value, int len, char *input_val) {
 }
 
 struct request *
-make_request_from_netreq(struct handler *hlr, struct net_req *nr, int sock) {
+make_request_from_netreq(struct handler *hlr, struct netreq *nr, int sock) {
 	//struct request *req = (struct request *)malloc(sizeof (struct request));
 	struct request *req = (struct request *)q_dequeue(hlr->req_pool);
 
@@ -82,15 +82,16 @@ add_request_info(struct request *req) {
 void *net_end_req(void *_req) {
 	struct request *req = (struct request *)_req;
 	struct handler *hlr = req->hlr;
-	struct net_ack *ack = (struct net_ack *)malloc(sizeof(struct net_ack));
+	//struct netack *ack = (struct netack *)malloc(sizeof(struct netack));
+	struct netack ack;
 
 	sw_end(&req->sw);
-	ack->seq_num = req->seq_num; // TODO
-	ack->type = req->type;
-	ack->elapsed_time = sw_get_usec(&req->sw);
+	ack.seq_num = req->seq_num; // TODO
+	ack.type = req->type;
+	ack.elapsed_time = sw_get_usec(&req->sw);
 
-	//send_ack(req->cl_sock, &ack);
-	q_enqueue((void *)ack, ack_q);
+	send_ack(req->cl_sock, &ack);
+	//q_enqueue((void *)ack, ack_q);
 
 	cl_release(hlr->flying);
 

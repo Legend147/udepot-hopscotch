@@ -18,7 +18,7 @@ aio_read(struct handler *hlr, uint64_t addr_in_byte, uint32_t size,
 	iocb->data = cb;
 
 	if (io_submit(hlr->aio_ctx, 1, &iocb) < 0) {
-		fprintf(stderr, "aio: error on submitting I/O");
+		perror("io_sumbit");
 		rc = -1;
 	}
 
@@ -39,7 +39,7 @@ aio_write(struct handler *hlr, uint64_t addr_in_byte, uint32_t size,
 	iocb->data = cb;
 
 	if (io_submit(hlr->aio_ctx, 1, &iocb) < 0) {
-		fprintf(stderr, "aio: error on submitting I/O");
+		perror("io_sumbit");
 		rc = -1;
 	}
 

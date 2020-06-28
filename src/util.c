@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#define SEND_ACK_BUFFERING
+//#define SEND_ACK_BUFFERING
 #define ACK_BUF_MAX 64
 
 uint64_t hashing_key(char *key, uint8_t len) {
@@ -58,19 +58,23 @@ ssize_t read_sock_bulk(int sock, void *buf, ssize_t max_objs, ssize_t align) {
 }
 
 
-ssize_t send_request(int sock, struct net_req *nr) {
-	return write(sock, nr, sizeof(struct net_req));
+ssize_t send_request(int sock, struct netreq *nr) {
+	return write(sock, nr, sizeof(struct netreq));
 }
 
-ssize_t recv_request(int sock, struct net_req *nr) {
-	return read_sock(sock, nr, sizeof(struct net_req));
+ssize_t send_request_bulk(int sock, struct netreq *nr_arr, int count) {
+	return write(sock, nr_arr, sizeof(struct netreq) * count);
+}
+
+ssize_t recv_request(int sock, struct netreq *nr) {
+	return read_sock(sock, nr, sizeof(struct netreq));
 }
 
 #ifdef SEND_ACK_BUFFERING
 #ifdef YCSB
 __thread uint32_t ack_buf[ACK_BUF_MAX];
 #else
-__thread struct net_ack ack_buf[ACK_BUF_MAX];
+__thread struct netack ack_buf[ACK_BUF_MAX];
 #endif
 __thread int buf_cnt = 0;
 #endif
@@ -83,14 +87,14 @@ ssize_t ack_buf_flush(int sock) {
 }
 #endif
 
-ssize_t send_ack(int sock, struct net_ack *na) {
+ssize_t send_ack(int sock, struct netack *na) {
 
 #ifdef SEND_ACK_BUFFERING
 	if (na->type == REQ_TYPE_GET) {
 #ifdef YCSB
 		return write(sock, &na->seq_num, sizeof(uint32_t));
 #else
-		return write(sock, na, sizeof(struct net_ack));
+		return write(sock, na, sizeof(struct netack));
 #endif
 	}
 
@@ -109,14 +113,14 @@ ssize_t send_ack(int sock, struct net_ack *na) {
 #ifdef YCSB
 	return write(sock, &na->seq_num, sizeof(uint32_t));
 #else
-	return write(sock, na, sizeof(struct net_ack));
+	return write(sock, na, sizeof(struct netack));
 #endif
 
 #endif
 }
 
-ssize_t recv_ack(int sock, struct net_ack *na) {
-	return read_sock(sock, na, sizeof(struct net_ack));
+ssize_t recv_ack(int sock, struct netack *na) {
+	return read_sock(sock, na, sizeof(struct netack));
 }
 
 void collect_latency(uint64_t table[], time_t latency) {

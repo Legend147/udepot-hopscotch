@@ -16,9 +16,6 @@
 int global_hlr_number;
 bool stopflag_hlr;
 
-stopwatch sw_handler;
-time_t t_handler;
-
 struct handler *handler_init(char dev_name[]) {
 	struct handler *hlr = (struct handler *)calloc(1, sizeof(struct handler));
 
@@ -103,8 +100,6 @@ void handler_free(struct handler *hlr) {
 		//cl_release(hlr->cond);
 	}
 
-	printf("t_handler:  %lu\n", t_handler);
-
 	print_kv_ops_stat(&hlr->ops->stat);
 	hlr->ops->free(hlr->ops);
 	free(hlr->ops);
@@ -188,8 +183,9 @@ void *request_handler(void *input) {
 		if (!(req=get_next_request(hlr))) {
 			continue;
 		}
+		req->end_req(req);
+		continue;
 
-		sw_start(&sw_handler);
 		while ((cb = (struct callback *)q_dequeue(hlr->done_q))) {
 			cb->func(cb->arg);
 			q_enqueue((void *)cb, hlr->cb_pool);
@@ -214,8 +210,6 @@ void *request_handler(void *input) {
 			fprintf(stderr, "Wrong req type!\n");
 			return NULL;
 		}
-		sw_end(&sw_handler);
-		t_handler += sw_get_usec(&sw_handler);
 	}
 	return NULL;
 }

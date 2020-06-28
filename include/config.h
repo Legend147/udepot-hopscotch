@@ -33,4 +33,8 @@
 #define QSIZE 1024
 #define QDEPTH 256
 
+#define IP "169.254.130.123"
+//#define IP "127.0.0.1"
+#define PORT 5556
+
 #endif

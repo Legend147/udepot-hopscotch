@@ -16,8 +16,6 @@
 
 #define MAX_EVENTS 1024
 
-#define PORT 5556
-
 int sv_sock, cl_sock;
 
 stopwatch sw_inf, sw_sockread, sw_makereq, sw_forward, sw_queueing, sw_ack, sw_hashing;
@@ -25,6 +23,9 @@ stopwatch sw_inf, sw_sockread, sw_makereq, sw_forward, sw_queueing, sw_ack, sw_h
 extern int num_syscalls;
 
 bool ack_sender_stop;
+
+// FIXME
+uint64_t hlr_fwd_cnt[32];
 
 struct server {
 	int fd, epfd;
@@ -38,8 +39,12 @@ struct server {
 queue *ack_q;
 
 static void server_exit(int sig) {
-	puts("");
-	printf("\nt_inf:       %lu\n", sw_get_lap_sum(&sw_inf));
+	puts("\n");
+	for (int i = 0; i < server.num_dev; i++) {
+		printf("hlr_fwd_cnt[%2d]: %lu\n", i, hlr_fwd_cnt[i]);
+	}
+	puts("\n");
+	printf("t_inf:       %lu\n", sw_get_lap_sum(&sw_inf));
 	printf("`t_sockread: %lu\n", sw_get_lap_sum(&sw_sockread));
 	printf("`t_queueing: %lu\n", sw_get_lap_sum(&sw_queueing));
 	printf("``t_hashing:   %lu\n", sw_get_lap_sum(&sw_hashing));
@@ -246,6 +251,9 @@ process_request(struct server *srv, int client_fd) {
 			hash_high = hashing_key_128(n_req[i].key, n_req[i].keylen).first;
 			hlr_idx = (hash_high >> 32) % srv->num_dev;
 			sw_lap(&sw_hashing);
+
+			// FIXME
+			hlr_fwd_cnt[hlr_idx]++;
 
 			sw_start(&sw_makereq);
 			req = make_request_from_netreq(srv->hlr[hlr_idx],

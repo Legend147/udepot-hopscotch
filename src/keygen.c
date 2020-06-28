@@ -27,6 +27,8 @@ struct keygen *keygen_init(uint64_t nr_key, int key_size) {
 		for (int j = 4; j < kg->key_size; j++) kg->key_pool[i][j] = '0'+(rand()%10);
 	}
 
+	pthread_mutex_init(&kg->seq_lock, NULL);
+
 	return kg;
 }
 
@@ -80,7 +82,11 @@ kg_key_t get_next_key_for_load(struct keygen *kg) {
 		fprintf(stderr, "Loading key overflow!\n");
 		return NULL;
 	} else {
-		return kg->key_pool[kg->load_cnt++];
+		kg_key_t return_key;
+		pthread_mutex_lock(&kg->seq_lock);
+		return_key = kg->key_pool[kg->load_cnt++];
+		pthread_mutex_unlock(&kg->seq_lock);
+		return return_key;
 	}
 }
 

@@ -2,6 +2,7 @@
 #define __KEYGEN_H__
 
 #include <stdint.h>
+#include <pthread.h>
 
 typedef char* kg_key_t;
 
@@ -25,6 +26,8 @@ struct keygen {
 	uint32_t seed;
 
 	uint64_t load_cnt;
+
+	pthread_mutex_t seq_lock;
 };
 
 struct keygen *keygen_init(uint64_t nr_key, int key_size);
